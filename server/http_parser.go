@@ -50,10 +50,7 @@ func (i *HttpParser) GetVal(key string) (interface{}, error) {
 }
 
 func (h *HttpParser) Bind(obj interface{}) (err error) {
-	if len(h.values) > 0 {
-		return h.bindHttpValues(reflect.TypeOf(obj).Elem(), reflect.ValueOf(obj).Elem())
-	}
-	return errors.New("empty input")
+	return h.bindHttpValues(reflect.TypeOf(obj).Elem(), reflect.ValueOf(obj).Elem())
 }
 
 func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error) {
