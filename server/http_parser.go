@@ -30,6 +30,8 @@ func NewHttpParser(request *http.Request) play.Parser {
 	}
 
 	if strings.Contains(contentType, "multipart/form-data") {
+		var maxMemory int64 = 1024 * 1024 * 10 // 10m
+		_ = request.ParseMultipartForm(maxMemory)
 		return &HttpParser{values: request.Form}
 	}
 
