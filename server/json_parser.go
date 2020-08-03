@@ -55,7 +55,7 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 			if defaultValue = tField.Tag.Get("default"); defaultValue != "" {
 				if tField.Type.Kind() == reflect.Slice {
 					if elems, err := setSliceValueWithString(tField.Type.String(), vField, defaultValue); err != nil {
-						return errors.New(tField.Name + " " + err.Error())
+						return errors.New("input <" + tField.Name + "> " + err.Error())
 					} else {
 						vField.Set(elems)
 					}
@@ -63,7 +63,7 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 					setValueWithString(tField.Type.Name(), vField, defaultValue)
 				}
 			} else if tField.Tag.Get("bind") == "required" {
-				return errors.New(tField.Name + " is required")
+				return errors.New("input <" + tField.Name + "> is required")
 			}
 			continue
 		}
@@ -94,13 +94,13 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 						if match, _ := regexp.MatchString(regexPattern, value.String()); match == false {
 							if defaultValue = tField.Tag.Get("default"); defaultValue != "" {
 								if elems, err := setSliceValueWithString(tField.Type.String(), vField, defaultValue); err != nil {
-									err = errors.New(tField.Name + " " + err.Error())
+									err = errors.New("input <" + tField.Name + "> " + err.Error())
 									return false
 								} else {
 									vField.Set(elems)
 								}
 							} else {
-								err = errors.New(tField.Name + " is mismatch")
+								err = errors.New("input <" + tField.Name + "> is mismatch")
 							}
 							return false
 						}
@@ -111,7 +111,7 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 					return true
 				})
 				if err != nil {
-					return errors.New(tField.Name + " " + err.Error())
+					return errors.New("input <" + tField.Name + "> " + err.Error())
 				}
 				vField.Set(elems)
 			}
@@ -120,16 +120,16 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 				if match, _ := regexp.MatchString(regexPattern, item.String()); match == false {
 					if defaultValue = tField.Tag.Get("default"); defaultValue != "" {
 						if err = setValueWithString(tField.Type.Name(), vField, defaultValue); err != nil {
-							return errors.New(tField.Name + " " + err.Error())
+							return errors.New("input <" + tField.Name + "> " + err.Error())
 						}
 					} else {
-						return errors.New(tField.Name + " is mismatch")
+						return errors.New("input <" + tField.Name + "> is mismatch")
 					}
 					continue
 				}
 			}
-			if err = setValueWithGJson(tField.Type.Name(), vField, &item); err != nil {
-				return errors.New(tField.Name + " " + err.Error())
+			if err = setValueWithGJson(tField.Type.String(), vField, &item); err != nil {
+				return errors.New("input <" + tField.Name + "> " + err.Error())
 			}
 		}
 	}
@@ -138,6 +138,10 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 }
 
 func setSliceValueWithGJson(fieldType string, elems reflect.Value, value *gjson.Result) (reflect.Value, error) {
+	if fieldType == "[]interface {}" {
+		elems = reflect.Append(elems, reflect.ValueOf(value.Value()))
+		return elems, nil
+	}
 	if fieldType != "[]string" && value.Type.String() != "Number" {
 		if _, err := strconv.ParseFloat(value.Str, 64); err != nil {
 			return elems, errors.New("data type need number")
@@ -172,6 +176,10 @@ func setSliceValueWithGJson(fieldType string, elems reflect.Value, value *gjson.
 }
 
 func setValueWithGJson(fieldType string, vField reflect.Value, value *gjson.Result) error {
+	if fieldType == "interface {}" {
+		vField.Set(reflect.ValueOf(value.Value()))
+		return nil
+	}
 	if fieldType != "string" && value.Type.String() != "Number" {
 		if _, err := strconv.ParseFloat(value.Str, 64); err != nil {
 			return errors.New("data type need number")

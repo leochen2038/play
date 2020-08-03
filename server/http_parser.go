@@ -95,17 +95,17 @@ func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error)
 			if defaultValue = tField.Tag.Get("default"); defaultValue != "" {
 				if tField.Type.Kind() == reflect.Slice {
 					if elems, err := setSliceValueWithString(tField.Type.String(), vField, defaultValue); err != nil {
-						return errors.New(tField.Name + " " + err.Error())
+						return errors.New("input <" + tField.Name + "> " + err.Error())
 					} else {
 						vField.Set(elems)
 					}
 				} else {
 					if err := setValueWithString(tField.Type.String(), vField, defaultValue); err != nil {
-						return errors.New(tField.Name + " " + err.Error())
+						return errors.New("input <" + tField.Name + "> " + err.Error())
 					}
 				}
 			} else if tField.Tag.Get("bind") == "required" {
-				return errors.New(tField.Name + " is required")
+				return errors.New("input <" + tField.Name + "> is required")
 			}
 			continue
 		}
@@ -117,18 +117,18 @@ func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error)
 					if match, _ := regexp.MatchString(regexPattern, value); match == false {
 						if defaultValue = tField.Tag.Get("default"); defaultValue != "" {
 							if elems, err := setSliceValueWithString(tField.Type.String(), vField, defaultValue); err != nil {
-								return errors.New(tField.Name + " " + err.Error())
+								return errors.New("input <" + tField.Name + "> " + err.Error())
 							} else {
 								vField.Set(elems)
 							}
 						} else {
-							return errors.New(tField.Name + " is mismatch")
+							return errors.New("input <" + tField.Name + "> is mismatch")
 						}
 						break
 					}
 				}
 				if elems, err = setSliceValueWithString(tField.Type.String(), elems, value); err != nil {
-					return errors.New(tField.Name + " " + err.Error())
+					return errors.New("input <" + tField.Name + "> " + err.Error())
 				}
 			}
 			vField.Set(elems)
@@ -137,16 +137,16 @@ func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error)
 				if match, _ := regexp.MatchString(regexPattern, item[0]); match == false {
 					if defaultValue = tField.Tag.Get("default"); defaultValue != "" {
 						if err = setValueWithString(tField.Type.String(), vField, defaultValue); err != nil {
-							return errors.New(tField.Name + " " + err.Error())
+							return errors.New("input <" + tField.Name + "> " + err.Error())
 						}
 					} else {
-						return errors.New(tField.Name + " is mismatch")
+						return errors.New("input <" + tField.Name + "> is mismatch")
 					}
 					continue
 				}
 			}
 			if err = setValueWithString(tField.Type.String(), vField, item[0]); err != nil {
-				return errors.New(tField.Name + " " + err.Error())
+				return errors.New("input <" + tField.Name + "> " + err.Error())
 			}
 		}
 	}
@@ -156,6 +156,8 @@ func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error)
 
 func setSliceValueWithString(fieldType string, elems reflect.Value, value string) (reflect.Value, error) {
 	switch fieldType {
+	case "[]interface {}":
+		elems = reflect.Append(elems, reflect.ValueOf(value))
 	case "[]string":
 		elems = reflect.Append(elems, reflect.ValueOf(value))
 	case "[]int8":
@@ -225,6 +227,8 @@ func setSliceValueWithString(fieldType string, elems reflect.Value, value string
 
 func setValueWithString(fieldType string, vField reflect.Value, value string) error {
 	switch fieldType {
+	case "interface {}":
+		vField.Set(reflect.ValueOf(value))
 	case "string":
 		vField.SetString(value)
 	case "int8":
