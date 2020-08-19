@@ -25,6 +25,8 @@ func (j *JsonParser) Bind(obj interface{}) (err error) {
 func (j *JsonParser) GetVal(key string) (val interface{}, err error) {
 	if result := j.json.Get(key); result.Exists() {
 		val = result.Value()
+	} else if key == "" {
+		val = j.json.Value()
 	} else {
 		err = errors.New("can not find key|" + key)
 	}

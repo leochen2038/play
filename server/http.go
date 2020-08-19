@@ -58,19 +58,17 @@ func setHandle(serverConfig HttpConfig) {
 			}
 		}()
 
+		ctx := play.NewContextWithInput(play.NewInput(NewHttpParser(request)))
+		ctx.HttpRequest = request
+		ctx.HttpResponse = writer
+
 		var action = request.URL.Path
 		if indexDot := strings.Index(action, "."); indexDot > 0 {
 			action = action[:indexDot]
 		}
-
 		if action == "/" {
-			err = play.NewError("action can not be empty", 0x100, nil)
-			return
+			action = "/index"
 		}
-
-		ctx := play.NewContextWithInput(play.NewInput(NewHttpParser(request)))
-		ctx.HttpRequest = request
-		ctx.HttpResponse = writer
 
 		err = play.RunAction(strings.ReplaceAll(action[1:], "/", "."), ctx)
 		serverConfig.Render(ctx, err)

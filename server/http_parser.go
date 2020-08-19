@@ -43,6 +43,13 @@ func (i *HttpParser) GetVal(key string) (interface{}, error) {
 	var ok bool
 	if val, ok = i.values[key]; !ok {
 		return nil, errors.New("can not find key " + key)
+	} else if key == "" {
+		values := map[string]interface{}{}
+		for k, v := range i.values {
+			if len(val) != 0 {
+				values[k] = v[0]
+			}
+		}
 	}
 
 	if len(val) == 0 {
