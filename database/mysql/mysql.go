@@ -51,10 +51,10 @@ func GetList(dest interface{}, query *play.Query) (err error) {
 	where, values := condtext(query)
 
 	rows, err = conn.Query("SELECT "+fields+" FROM "+query.DBName+"."+query.Table+where, values...)
-	defer rows.Close()
 	if err != nil {
 		return
 	}
+	defer rows.Close()
 
 	err = scanAll(rows, dest)
 	return
@@ -71,10 +71,10 @@ func GetOne(dest interface{}, query *play.Query) (err error) {
 	where, values := condtext(query)
 
 	rows, err = conn.Query("SELECT "+fields+" FROM "+query.DBName+"."+query.Table+where, values...)
-	defer rows.Close()
 	if err != nil {
 		return
 	}
+	defer rows.Close()
 
 	err = scanOne(rows, dest)
 	return
@@ -155,6 +155,8 @@ func condtext(query *play.Query) (string, []interface{}) {
 				fields = append(fields, v.Field+" BETWEEN ? AND ?")
 			case "In":
 				fields = append(fields, v.Field+" in ("+placeholders(v.Val)+")")
+			case "Like":
+				fields = append(fields, v.Field+"LIKE ?")
 			}
 		}
 
@@ -396,10 +398,10 @@ func Count(query *play.Query) (count int64, err error) {
 
 	where, values := condtext(query)
 	rows, err = conn.Query("SELECT COUNT(*)  FROM "+query.DBName+"."+query.Table+where, values...)
-	defer rows.Close()
 	if err != nil {
 		return
 	}
+	defer rows.Close()
 
 	if rows.Next() {
 		err = rows.Scan(&count)
