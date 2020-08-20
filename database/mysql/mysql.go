@@ -154,9 +154,9 @@ func condtext(query *play.Query) (string, []interface{}) {
 			case "Between":
 				fields = append(fields, v.Field+" BETWEEN ? AND ?")
 			case "In":
-				fields = append(fields, v.Field+" in ("+placeholders(v.Val)+")")
+				fields = append(fields, v.Field+" IN ("+placeholders(v.Val)+")")
 			case "Like":
-				fields = append(fields, v.Field+"LIKE ?")
+				fields = append(fields, v.Field+" LIKE ?")
 			}
 		}
 
