@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type JsonParser struct {
@@ -45,6 +46,10 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 	for i := 0; i < fieldCount; i++ {
 		vField, tField = v.Field(i), t.Field(i)
 
+		if !vField.CanInterface() {
+			continue
+		}
+
 		if customKey := tField.Tag.Get("key"); customKey != "" {
 			item = source.Get(customKey)
 		} else {
@@ -62,7 +67,7 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 						vField.Set(elems)
 					}
 				} else {
-					setValueWithString(tField.Type.Name(), vField, defaultValue)
+					setValueWithString(&tField, vField, defaultValue)
 				}
 			} else if tField.Tag.Get("bind") == "required" {
 				return errors.New("input <" + tField.Name + "> is required")
@@ -70,7 +75,7 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 			continue
 		}
 
-		if tField.Type.Kind().String() == "struct" {
+		if tField.Type.Kind().String() == "struct" && tField.Type.String() != "time.Time" {
 			if err = j.bindGJson(tField.Type, vField.Elem(), &item); err != nil {
 				return err
 			}
@@ -121,7 +126,7 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 			if regexPattern = tField.Tag.Get("regex"); regexPattern != "" {
 				if match, _ := regexp.MatchString(regexPattern, item.String()); match == false {
 					if defaultValue = tField.Tag.Get("default"); defaultValue != "" {
-						if err = setValueWithString(tField.Type.Name(), vField, defaultValue); err != nil {
+						if err = setValueWithString(&tField, vField, defaultValue); err != nil {
 							return errors.New("input <" + tField.Name + "> " + err.Error())
 						}
 					} else {
@@ -130,7 +135,7 @@ func (j *JsonParser) bindGJson(t reflect.Type, v reflect.Value, source *gjson.Re
 					continue
 				}
 			}
-			if err = setValueWithGJson(tField.Type.String(), vField, &item); err != nil {
+			if err = setValueWithGJson(&tField, vField, &item); err != nil {
 				return errors.New("input <" + tField.Name + "> " + err.Error())
 			}
 		}
@@ -177,12 +182,13 @@ func setSliceValueWithGJson(fieldType string, elems reflect.Value, value *gjson.
 	return elems, nil
 }
 
-func setValueWithGJson(fieldType string, vField reflect.Value, value *gjson.Result) error {
+func setValueWithGJson(tField *reflect.StructField, vField reflect.Value, value *gjson.Result) error {
+	fieldType := tField.Type.String()
 	if fieldType == "interface {}" {
 		vField.Set(reflect.ValueOf(value.Value()))
 		return nil
 	}
-	if fieldType != "string" && value.Type.String() != "Number" {
+	if fieldType != "time.Time" && fieldType != "string" && value.Type.String() != "Number" {
 		if _, err := strconv.ParseFloat(value.Str, 64); err != nil {
 			return errors.New("data type need number")
 		}
@@ -210,6 +216,22 @@ func setValueWithGJson(fieldType string, vField reflect.Value, value *gjson.Resu
 		fallthrough
 	case "float64":
 		vField.SetFloat(value.Float())
+	case "time.Time":
+		if value.Type.String() != "Number" {
+			layout := tField.Tag.Get("layout")
+			if layout != "" {
+				if v, err := time.Parse(layout, value.String()); err != nil {
+					return err
+				} else {
+					vField.Set(reflect.ValueOf(v))
+				}
+			} else {
+				return errors.New("parser time error")
+			}
+		} else {
+			v := time.Unix(value.Int(), 0)
+			vField.Set(reflect.ValueOf(v))
+		}
 	}
 	return nil
 }

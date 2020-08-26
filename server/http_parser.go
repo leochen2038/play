@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type HttpParser struct {
@@ -74,8 +75,10 @@ func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error)
 	for i := 0; i < fieldCount; i++ {
 		item, subfix = nil, ""
 		vField, tField = v.Field(i), t.Field(i)
-
-		if tField.Type.Kind() == reflect.Struct {
+		if !vField.CanInterface() {
+			continue
+		}
+		if tField.Type.Kind() == reflect.Struct && tField.Type.String() != "time.Time" {
 			return errors.New("not support struct")
 		}
 
@@ -107,7 +110,7 @@ func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error)
 						vField.Set(elems)
 					}
 				} else {
-					if err := setValueWithString(tField.Type.String(), vField, defaultValue); err != nil {
+					if err := setValueWithString(&tField, vField, defaultValue); err != nil {
 						return errors.New("input <" + tField.Name + "> " + err.Error())
 					}
 				}
@@ -143,7 +146,7 @@ func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error)
 			if regexPattern = tField.Tag.Get("regex"); regexPattern != "" {
 				if match, _ := regexp.MatchString(regexPattern, item[0]); match == false {
 					if defaultValue = tField.Tag.Get("default"); defaultValue != "" {
-						if err = setValueWithString(tField.Type.String(), vField, defaultValue); err != nil {
+						if err = setValueWithString(&tField, vField, defaultValue); err != nil {
 							return errors.New("input <" + tField.Name + "> " + err.Error())
 						}
 					} else {
@@ -152,7 +155,7 @@ func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error)
 					continue
 				}
 			}
-			if err = setValueWithString(tField.Type.String(), vField, item[0]); err != nil {
+			if err = setValueWithString(&tField, vField, item[0]); err != nil {
 				return errors.New("input <" + tField.Name + "> " + err.Error())
 			}
 		}
@@ -232,7 +235,8 @@ func setSliceValueWithString(fieldType string, elems reflect.Value, value string
 	return elems, nil
 }
 
-func setValueWithString(fieldType string, vField reflect.Value, value string) error {
+func setValueWithString(tField *reflect.StructField, vField reflect.Value, value string) error {
+	fieldType := tField.Type.String()
 	switch fieldType {
 	case "interface {}":
 		vField.Set(reflect.ValueOf(value))
@@ -269,6 +273,22 @@ func setValueWithString(fieldType string, vField reflect.Value, value string) er
 			return err
 		} else {
 			vField.SetFloat(n)
+		}
+	case "time.Time":
+		if ival, err := strconv.ParseInt(value, 10, 64); err != nil {
+			layout := tField.Tag.Get("layout")
+			if layout != "" {
+				if v, err := time.Parse(layout, value); err != nil {
+					return err
+				} else {
+					vField.Set(reflect.ValueOf(v))
+				}
+			} else {
+				return errors.New("parser time error")
+			}
+		} else {
+			v := time.Unix(ival, 0)
+			vField.Set(reflect.ValueOf(v))
 		}
 	}
 	return nil
