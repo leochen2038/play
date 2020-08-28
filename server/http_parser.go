@@ -278,7 +278,8 @@ func setValueWithString(tField *reflect.StructField, vField reflect.Value, value
 		if ival, err := strconv.ParseInt(value, 10, 64); err != nil {
 			layout := tField.Tag.Get("layout")
 			if layout != "" {
-				if v, err := time.Parse(layout, value); err != nil {
+				local, _ := time.LoadLocation("Local")
+				if v, err := time.ParseInLocation(layout, value, local); err != nil {
 					return err
 				} else {
 					vField.Set(reflect.ValueOf(v))

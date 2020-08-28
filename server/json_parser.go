@@ -220,6 +220,8 @@ func setValueWithGJson(tField *reflect.StructField, vField reflect.Value, value 
 		if value.Type.String() != "Number" {
 			layout := tField.Tag.Get("layout")
 			if layout != "" {
+				local, _ := time.LoadLocation("Local")
+				time.ParseInLocation(layout, value.String(), local)
 				if v, err := time.Parse(layout, value.String()); err != nil {
 					return err
 				} else {
