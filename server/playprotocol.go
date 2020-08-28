@@ -40,7 +40,54 @@ func (p *PlayProtocol) ResponseMessage(message []byte) error {
 	return err
 }
 
+func MarshalRequest(protocol *PlayProtocol) ([]byte, int, error) {
+	actionLen := byte(len(protocol.Action))
+	protocolSize := 49 + len(protocol.Message) + len(protocol.Action)
+	messageSize := int2Bytes(int32(protocolSize - 8))
+	buffer := make([]byte, 0, protocolSize)
+
+	buffer = append(buffer, []byte("==>>")...)
+	buffer = append(buffer, messageSize...)
+	buffer = append(buffer, protocol.version)
+	buffer = append(buffer, protocol.Responed)
+	buffer = append(buffer, ushortInt2Bytes(protocol.CallerId)...)
+	buffer = append(buffer, actionLen)
+	buffer = append(buffer, int2Bytes(int32(len(protocol.Message)))...)
+	buffer = append(buffer, []byte(protocol.requestId)...)
+	buffer = append(buffer, []byte(protocol.Action)...)
+	buffer = append(buffer, protocol.Message...)
+
+	return buffer, protocolSize, nil
+}
+
+func ReadResponseBytes(conn net.Conn) ([]byte, error) {
+	var buffer = make([]byte, 4096)
+	for {
+		_, err := conn.Read(buffer)
+		if err != nil {
+			return nil, err
+		}
+		if len(buffer) < 8 {
+			continue
+		}
+		if string(buffer[:4]) != "==>>" {
+			return nil, fmt.Errorf("[play server] error play socket protocol head")
+		}
+
+		dataLength := bytes2Int(buffer[4:8]) + 8
+		if dataLength > len(buffer) {
+			continue
+		}
+
+		if buffer[8] != 2 {
+			return nil, fmt.Errorf("[play server] error play socket protocol version must be 2")
+		}
+		return buffer[:dataLength], nil
+	}
+}
+
 func buildRequest(requestId string, callerId uint16, action string, message []byte, respond bool) (buffer []byte, protocolSize int) {
+
 	var version byte = 2
 	var actionLen byte = byte(len(action))
 	var responByte byte = 0

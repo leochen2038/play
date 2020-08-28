@@ -16,25 +16,25 @@ import (
 var noDeadline time.Time
 
 type PlaysocketConfig struct {
-	Address string
-	Render  func(protocol *PlayProtocol, ctx *play.Context, err error)
+	Address     string
+	Render      func(protocol *PlayProtocol, ctx *play.Context, err error)
+	ProcessFunc func(protocal *PlayProtocol)
+	ProcessChan chan *PlayProtocol
 }
 
 func BootPlaysocket(serverConfig PlaysocketConfig) {
-	listen(serverConfig.Address, func(protocol *PlayProtocol) {
-		defer func() {
-			if panicInfo := recover(); panicInfo != nil {
-				log.Fatal(fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack())))
+	if serverConfig.ProcessChan == nil && serverConfig.ProcessFunc == nil {
+		serverConfig.ProcessFunc = func(protocol *PlayProtocol) {
+			var err error
+			ctx := play.NewContextWithInput(play.NewInput(NewJsonParser(protocol.Message)))
+			err = play.RunAction(protocol.Action, ctx)
+			if serverConfig.Render != nil {
+				serverConfig.Render(protocol, ctx, err)
 			}
-		}()
-
-		var err error
-		ctx := play.NewContextWithInput(play.NewInput(NewJsonParser(protocol.Message)))
-		err = play.RunAction(protocol.Action, ctx)
-		if serverConfig.Render != nil {
-			serverConfig.Render(protocol, ctx, err)
 		}
-	}, nil)
+	}
+
+	listen(serverConfig.Address, serverConfig.ProcessFunc, serverConfig.ProcessChan)
 }
 
 func listen(address string, process func(protocol *PlayProtocol), channel chan *PlayProtocol) {
@@ -43,27 +43,26 @@ func listen(address string, process func(protocol *PlayProtocol), channel chan *
 		id := getGracefulSocket(1)
 		if id > 2 {
 			if playListener, err = net.FileListener(os.NewFile(id, "")); err != nil {
-				log.Fatal("[playsocket server] error inheriting socket fd")
+				log.Fatal("[ocket server] error inheriting socket fd")
 				os.Exit(1)
 			}
 			if err = shouldKillParent(); err != nil {
-				log.Println("[playsocket server] failed to close parent:", err)
+				log.Println("[socket server] failed to close parent:", err)
 				os.Exit(1)
 			}
 		} else {
-			log.Fatal("[playsocket server] error socket fd < 3")
+			log.Fatal("[socket server] error socket fd < 3")
 			os.Exit(1)
 		}
 	} else {
 		if playListener, err = net.Listen("tcp", address); err != nil {
-			log.Fatal("[playsokcet server] listen error:", err)
+			log.Fatal("[sokcet server] listen error:", err)
 			os.Exit(1)
 		}
-		log.Println("[playsokcet server] listen success on", address)
+		log.Println("[sokcet server] listen success on", address)
 	}
 
 	defer playListener.Close()
-
 	for {
 		var conn net.Conn
 		if conn, err = playListener.Accept(); err != nil {
@@ -72,6 +71,7 @@ func listen(address string, process func(protocol *PlayProtocol), channel chan *
 		log.Println("[play server]", conn.RemoteAddr().String(), "connect success")
 		go accept(conn, process, channel)
 	}
+
 }
 
 func Connect(address string, callerId uint16, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
@@ -154,7 +154,15 @@ func accept(conn net.Conn, process func(protocol *PlayProtocol), channel chan *P
 			wg.Add(1)
 			protocol.Conn = conn
 			if process != nil {
-				process(protocol)
+				func() {
+					defer func() {
+						if panicInfo := recover(); panicInfo != nil {
+							log.Fatal(fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack())))
+						}
+					}()
+					process(protocol)
+				}()
+
 			} else if channel != nil {
 				channel <- protocol
 			}
