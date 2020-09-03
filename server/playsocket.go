@@ -74,15 +74,15 @@ func listen(address string, process func(protocol *PlayProtocol), channel chan *
 
 }
 
-func Connect(address string, callerId uint16, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
-	reponseByte, err = _connect(address, callerId, action, message, respond, timeout)
+func Connect(address string, callerId int, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+	reponseByte, err = _connect(address, callerId, tagId, action, message, respond, timeout)
 	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
-		return _connect(address, callerId, action, message, respond, timeout)
+		return _connect(address, callerId, tagId, action, message, respond, timeout)
 	}
 	return
 }
 
-func _connect(address string, callerId uint16, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+func _connect(address string, callerId int, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
 	var conn *PlayConn
 	if conn, err = GetSocketPoolBy(address).GetConn(); err != nil {
 		return nil, fmt.Errorf("unable connect %s, %w", address, err)
@@ -90,7 +90,7 @@ func _connect(address string, callerId uint16, action string, message []byte, re
 	defer conn.Close()
 
 	requestId := getMicroUqid(conn.LocalAddr().String())
-	requestByte, protocolSize := buildRequest(requestId, callerId, action, message, respond)
+	requestByte, protocolSize := buildRequestBytes(tagId, requestId, callerId, action, message, respond)
 
 	if n, err := conn.Write(requestByte); err != nil || n != protocolSize {
 		conn.Unsable = true
@@ -113,16 +113,16 @@ func _connect(address string, callerId uint16, action string, message []byte, re
 				log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 				return nil, err
 			}
-			protocol, surplus, err = parseResponse(append(surplus, buffer[:n]...))
+			protocol, surplus, err = parseResponseProtocol(append(surplus, buffer[:n]...))
 			if err != nil {
 				conn.Unsable = true
 				log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 				return nil, err
 			}
 			if protocol != nil {
-				if protocol.requestId != requestId {
+				if protocol.RequestId != requestId {
 					conn.Unsable = true
-					return nil, fmt.Errorf("protocol err expect %s but %s", requestId, protocol.requestId)
+					return nil, fmt.Errorf("protocol err expect %s but %s", requestId, protocol.RequestId)
 				}
 				return protocol.Message, nil
 			}
@@ -145,7 +145,7 @@ func accept(conn net.Conn, process func(protocol *PlayProtocol), channel chan *P
 			log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 			return
 		}
-		protocol, surplus, err = parseProtocol(append(surplus, buffer[:n]...))
+		protocol, surplus, err = parseRequestProtocol(append(surplus, buffer[:n]...))
 		if err != nil {
 			log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 			return
