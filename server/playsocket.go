@@ -87,7 +87,7 @@ func listen(address string, process func(protocol *PlayProtocol), channel chan *
 //	return
 //}
 
-func ConnectWithPlayCtx(ctx *play.Context, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+func ConnectWithPlayContext(ctx *play.Context, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
 	ctx.SpanId++
 	var spanId = make([]byte, 0, 16)
 	spanId = append(spanId, ctx.ParentSpandId...)
