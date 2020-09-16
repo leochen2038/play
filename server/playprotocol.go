@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -16,32 +17,37 @@ import (
 // 4  byte : dataSize
 // 1  byte : version
 // 4  byte : tagId
-// 32 byte : requestId // 45
+// 32 byte : traceId // 45
+
+// 16 byte : spanId // 61
 // 4  byte : callId
 // 1  byte : actionLen
 // 1  byte : responed
-// total   : 51 bytes
+// total   : 67 bytes
 // action, data
+
 // response protocol
 // 4  byte : <<==
 // 4  byte : dataSize
 // 1  byte : version
 // 4  byte : tagId
-// 32 byte : requrestId // 45
+// 32 byte : traceId // 45
+
 // 4  byte : rc
 // total   : 49 bytes
 // data
 
 type PlayProtocol struct {
-	Rc        int
-	Version   byte
-	CallerId  int
-	TagId     int
-	RequestId string
-	Conn      net.Conn
-	Responed  byte
-	Action    string
-	Message   []byte
+	Rc       int
+	Version  byte
+	CallerId int
+	TagId    int
+	TraceId  string
+	SpanId   []byte
+	Conn     net.Conn
+	Respond  byte
+	Action   string
+	Message  []byte
 }
 
 func (p *PlayProtocol) ResponseByMessage(message []byte, rc int) error {
@@ -52,31 +58,39 @@ func (p *PlayProtocol) ResponseByMessage(message []byte, rc int) error {
 	buffer = append(buffer, int2Bytes(protocolSize-8)...)
 	buffer = append(buffer, p.Version)
 	buffer = append(buffer, int2Bytes(p.TagId)...)
-	buffer = append(buffer, []byte(p.RequestId)...)
+	buffer = append(buffer, []byte(p.TraceId)...)
 
 	buffer = append(buffer, int2Bytes(rc)...)
 	buffer = append(buffer, message...)
 
 	n, err := p.Conn.Write(buffer)
 	if err != nil || n != protocolSize {
-		p.Conn.Close()
+		return p.Conn.Close()
 	}
 	return err
 }
 
 func MarshalRequest(protocol *PlayProtocol) ([]byte, int, error) {
-	protocolSize := 51 + len(protocol.Action) + len(protocol.Message)
+	protocolSize := 67 + len(protocol.Action) + len(protocol.Message)
 	buffer := make([]byte, 0, protocolSize)
 
 	buffer = append(buffer, []byte("==>>")...)
 	buffer = append(buffer, int2Bytes(protocolSize-8)...)
 	buffer = append(buffer, protocol.Version)
 	buffer = append(buffer, int2Bytes(protocol.TagId)...)
-	buffer = append(buffer, []byte(protocol.RequestId)...)
+	buffer = append(buffer, []byte(protocol.TraceId)...)
+	if len(protocol.SpanId) >= 16 {
+		buffer = append(buffer, protocol.SpanId[:16]...)
+	} else {
+		buffer = append(buffer, protocol.SpanId...)
+		for i := 16 - len(protocol.SpanId); i > 0; i-- {
+			buffer = append(buffer, 0)
+		}
+	}
 
 	buffer = append(buffer, int2Bytes(protocol.CallerId)...)
 	buffer = append(buffer, byte(len(protocol.Action)))
-	buffer = append(buffer, protocol.Responed)
+	buffer = append(buffer, protocol.Respond)
 
 	buffer = append(buffer, []byte(protocol.Action)...)
 	buffer = append(buffer, protocol.Message...)
@@ -91,7 +105,7 @@ func UnmarshalResponse(buffer []byte, protocol *PlayProtocol) error {
 	dataLength := bytes2Int(buffer[4:8]) + 8
 	protocol.Version = buffer[8]
 	protocol.TagId = bytes2Int(buffer[9:13])
-	protocol.RequestId = string(buffer[13:45])
+	protocol.TraceId = string(buffer[13:45])
 	protocol.Rc = bytes2Int(buffer[45:49])
 	protocol.Message = buffer[49:dataLength]
 	return nil
@@ -130,12 +144,13 @@ func ReadResponseBytes(conn net.Conn, timeout time.Duration) ([]byte, error) {
 	}
 }
 
-func buildRequestBytes(tagId int, requestId string, callerId int, action string, message []byte, respond bool) (buffer []byte, protocolSize int) {
+func buildRequestBytes(tagId int, traceId string, spanId []byte, callerId int, action string, message []byte, respond bool) (buffer []byte, protocolSize int) {
+
 	var version byte = 3
-	var actionLen byte = byte(len(action))
+	var actionLen = byte(len(action))
 	var responByte byte = 0
 
-	protocolSize = 51 + len(action) + len(message)
+	protocolSize = 67 + len(action) + len(message)
 	if respond {
 		responByte = 1
 	}
@@ -144,7 +159,15 @@ func buildRequestBytes(tagId int, requestId string, callerId int, action string,
 	buffer = append(buffer, int2Bytes(protocolSize-8)...)
 	buffer = append(buffer, version)
 	buffer = append(buffer, int2Bytes(tagId)...)
-	buffer = append(buffer, []byte(requestId)...)
+	buffer = append(buffer, []byte(traceId)...)
+	if len(spanId) >= 16 {
+		buffer = append(buffer, spanId[:16]...)
+	} else {
+		buffer = append(buffer, spanId...)
+		for i := 16 - len(spanId); i > 0; i-- {
+			buffer = append(buffer, 0)
+		}
+	}
 
 	buffer = append(buffer, int2Bytes(callerId)...)
 	buffer = append(buffer, actionLen)
@@ -182,7 +205,7 @@ func parseResponseProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 	protocol := &PlayProtocol{}
 	protocol.Version = buffer[8]
 	protocol.TagId = bytes2Int(buffer[9:13])
-	protocol.RequestId = string(buffer[13:45])
+	protocol.TraceId = string(buffer[13:45])
 	protocol.Rc = bytes2Int(buffer[45:49])
 	protocol.Message = buffer[49:dataSize]
 
@@ -190,6 +213,7 @@ func parseResponseProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 }
 
 func parseRequestProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
+	fmt.Println(buffer)
 	if len(buffer) < 8 {
 		// log.Println("[play server] buffer byte length must > 8")
 		return nil, buffer, nil
@@ -212,27 +236,31 @@ func parseRequestProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 		return nil, nil, err
 	}
 
-	actionEndIdx := 51 + bytes2Int(buffer[49:50])
-
 	protocol := &PlayProtocol{}
 	protocol.Version = buffer[8]
 	protocol.TagId = bytes2Int(buffer[9:13])
-	protocol.RequestId = string(buffer[13:45])
+	protocol.TraceId = string(buffer[13:45])
+	for _, v := range buffer[45:61] {
+		if v > 0 {
+			protocol.SpanId = append(protocol.SpanId, v)
+		}
+	}
+	protocol.CallerId = bytes2Int(buffer[61:65])
+	actionEndIdx := 67 + bytes2Int(buffer[65:66])
+	protocol.Respond = buffer[66]
 
-	protocol.CallerId = bytes2Int(buffer[45:49])
-	protocol.Responed = buffer[50]
-
-	protocol.Action = string(buffer[51:actionEndIdx])
+	protocol.Action = string(buffer[67:actionEndIdx])
 	protocol.Message = buffer[actionEndIdx:dataLength]
 
+	//fmt.Println(protocol.SpanId)
 	return protocol, buffer[dataLength:], nil
 }
 
 func bytes2Int(data []byte) int {
-	var ret int = 0
-	var len int = len(data)
+	var ret = 0
+	var l = len(data)
 	var i uint = 0
-	for i = 0; i < uint(len); i++ {
+	for i = 0; i < uint(l); i++ {
 		ret = ret | (int(data[i]) << (i * 8))
 	}
 	return ret
@@ -240,37 +268,48 @@ func bytes2Int(data []byte) int {
 
 func int2Bytes(data int) (ret []byte) {
 	var d32 = int32(data)
-	var len uintptr = unsafe.Sizeof(d32)
+	var sizeof = unsafe.Sizeof(d32)
 
-	ret = make([]byte, len)
+	ret = make([]byte, sizeof)
 	var tmp int32 = 0xff
 	var index uint = 0
-	for index = 0; index < uint(len); index++ {
+	for index = 0; index < uint(sizeof); index++ {
 		ret[index] = byte((tmp << (index * 8) & d32) >> (index * 8))
 	}
 	return ret
 }
 
 func ushortInt2Bytes(data uint16) (ret []byte) {
-	var len uintptr = unsafe.Sizeof(data)
-	ret = make([]byte, len)
+	var sizeof = unsafe.Sizeof(data)
+	ret = make([]byte, sizeof)
 	var tmp uint16 = 0xff
 	var index uint = 0
-	for index = 0; index < uint(len); index++ {
+	for index = 0; index < uint(sizeof); index++ {
 		ret[index] = byte((tmp << (index * 8) & data) >> (index * 8))
 	}
 	return ret
 }
 
-func getMicroUqid(localaddr string) string {
+func getMicroUqid(localaddr string) (traceId string) {
 	var hexIp string
 	ip := localaddr[:strings.Index(localaddr, ":")]
-	for _, val := range strings.Split(ip, ".") {
-		hex, _ := strconv.Atoi(val)
-		hexIp += fmt.Sprintf("%02x", hex)
+	for j, i := 0, 0; i < len(ip); i++ {
+		if ip[i] == '.' {
+			hex, _ := strconv.Atoi(ip[j:i])
+			hexIp += fmt.Sprintf("%02x", hex)
+			j = i + 1
+		}
 	}
 
-	tn := time.Now()
-	usec, _ := strconv.Atoi(tn.Format(".999999"))
-	return strings.Replace(fmt.Sprintf("%s%06d%s%04x", tn.Format("20060102150405"), usec, hexIp, os.Getpid()%0x10000), ".", "", 1)
+	runtime.Gosched()
+	tm := time.Now()
+	micro := tm.Format(".000000")
+
+	if len(hexIp) > 8 {
+		traceId = fmt.Sprintf("%s%06s%.8s%04x", tm.Format("20060102150405"), micro[1:], hexIp, os.Getpid()%0x10000)
+	} else {
+		traceId = fmt.Sprintf("%s%06s%08s%04x", tm.Format("20060102150405"), micro[1:], hexIp, os.Getpid()%0x10000)
+	}
+
+	return
 }

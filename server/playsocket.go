@@ -27,6 +27,11 @@ func BootPlaysocket(serverConfig PlaysocketConfig) {
 		serverConfig.ProcessFunc = func(protocol *PlayProtocol) {
 			var err error
 			ctx := play.NewContextWithInput(play.NewInput(NewJsonParser(protocol.Message)))
+			ctx.SpanId = 0
+			ctx.TagId = protocol.TagId
+			ctx.TraceId = protocol.TraceId
+			ctx.ParentSpandId = protocol.SpanId
+
 			err = play.RunAction(protocol.Action, ctx)
 			if serverConfig.Render != nil {
 				serverConfig.Render(protocol, ctx, err)
@@ -74,23 +79,35 @@ func listen(address string, process func(protocol *PlayProtocol), channel chan *
 
 }
 
-func Connect(address string, callerId int, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
-	reponseByte, err = _connect(address, callerId, tagId, action, message, respond, timeout)
+//func Connect(address string, callerId int, traceId string, spanId []byte, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+//	reponseByte, err = _connect(address, callerId, traceId, spanId, tagId, action, message, respond, timeout)
+//	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
+//		return _connect(address, callerId, traceId, spanId, tagId, action, message, respond, timeout)
+//	}
+//	return
+//}
+
+func ConnectWtihPlayCtx(ctx *play.Context, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+	ctx.SpanId++
+	var spanId = make([]byte, 0, 16)
+	spanId = append(spanId, ctx.ParentSpandId...)
+	spanId = append(spanId, ctx.SpanId)
+
+	reponseByte, err = _connect(address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
 	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
-		return _connect(address, callerId, tagId, action, message, respond, timeout)
+		return _connect(address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
 	}
 	return
 }
 
-func _connect(address string, callerId int, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+func _connect(address string, callerId int, traceId string, spanId []byte, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
 	var conn *PlayConn
 	if conn, err = GetSocketPoolBy(address).GetConn(); err != nil {
 		return nil, fmt.Errorf("unable connect %s, %w", address, err)
 	}
 	defer conn.Close()
 
-	requestId := getMicroUqid(conn.LocalAddr().String())
-	requestByte, protocolSize := buildRequestBytes(tagId, requestId, callerId, action, message, respond)
+	requestByte, protocolSize := buildRequestBytes(tagId, traceId, spanId, callerId, action, message, respond)
 
 	if n, err := conn.Write(requestByte); err != nil || n != protocolSize {
 		conn.Unsable = true
@@ -120,9 +137,9 @@ func _connect(address string, callerId int, tagId int, action string, message []
 				return nil, err
 			}
 			if protocol != nil {
-				if protocol.RequestId != requestId {
+				if protocol.TraceId != traceId {
 					conn.Unsable = true
-					return nil, fmt.Errorf("protocol err expect %s but %s", requestId, protocol.RequestId)
+					return nil, fmt.Errorf("protocol err expect %s but %s", traceId, protocol.TraceId)
 				}
 				return protocol.Message, nil
 			}
@@ -162,7 +179,6 @@ func accept(conn net.Conn, process func(protocol *PlayProtocol), channel chan *P
 					}()
 					process(protocol)
 				}()
-
 			} else if channel != nil {
 				channel <- protocol
 			}

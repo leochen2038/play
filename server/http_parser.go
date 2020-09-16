@@ -60,7 +60,10 @@ func (i *HttpParser) GetVal(key string) (interface{}, error) {
 }
 
 func (h *HttpParser) Bind(obj interface{}) (err error) {
-	return h.bindHttpValues(reflect.TypeOf(obj).Elem(), reflect.ValueOf(obj).Elem())
+	if vInput := reflect.ValueOf(obj).Elem().FieldByName("Input"); vInput.CanSet() {
+		return h.bindHttpValues(vInput.Type(), vInput)
+	}
+	return
 }
 
 func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error) {

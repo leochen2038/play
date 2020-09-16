@@ -20,7 +20,10 @@ func NewJsonParser(data []byte) *JsonParser {
 }
 
 func (j *JsonParser) Bind(obj interface{}) (err error) {
-	return j.bindGJson(reflect.TypeOf(obj).Elem(), reflect.ValueOf(obj).Elem(), &j.json)
+	if vInput := reflect.ValueOf(obj).Elem().FieldByName("Input"); vInput.CanSet() {
+		return j.bindGJson(vInput.Type(), vInput, &j.json)
+	}
+	return
 }
 
 func (j *JsonParser) GetVal(key string) (val interface{}, err error) {

@@ -12,7 +12,7 @@ var (
 )
 
 var mu sync.RWMutex
-var list map[string]*SocketPool = make(map[string]*SocketPool, 16)
+var list = make(map[string]*SocketPool, 16)
 
 func GetSocketPoolBy(address string) (pool *SocketPool) {
 	var ok bool
