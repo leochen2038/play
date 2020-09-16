@@ -80,7 +80,7 @@ func RunAction(name string, ctx *Context) (err error) {
 				structValue := procOutputVal.Field(i)
 				structKey := structType.Tag.Get("json")
 				if structKey == "" {
-					structKey = procOutputType.Name
+					structKey = structType.Name
 				}
 				ctx.Output.Set(structKey, structValue.Interface())
 			}
