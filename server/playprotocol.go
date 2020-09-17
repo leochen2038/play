@@ -223,7 +223,7 @@ func parseResponseProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 		return nil, buffer, nil
 	}
 
-	if string(buffer[:4]) != "<<==" && string(buffer[:4]) != "==>" {
+	if string(buffer[:4]) != "<<==" && string(buffer[:4]) != "==>>" {
 		err := fmt.Errorf("[play server] error play socket protocol head")
 		return nil, nil, err
 	}
