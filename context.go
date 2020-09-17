@@ -12,14 +12,15 @@ type Context struct {
 	Input       *Input
 	Output      Output
 
-	HttpRequest   *http.Request
-	HttpResponse  http.ResponseWriter
-	Session       Session
-	TraceId       string
-	SpanId        byte
-	ParentSpandId []byte
-	TagId         int
-	doneFlag      string
+	HttpRequest  *http.Request
+	HttpResponse http.ResponseWriter
+	Session      Session
+	TraceId      string
+	SpanId       byte
+	ParentSpanId []byte
+	TagId        int
+	Version      byte
+	doneFlag     string
 }
 
 func (ctx *Context) Done(doneFlag string) error {

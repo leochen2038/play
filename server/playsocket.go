@@ -30,8 +30,8 @@ func BootPlaysocket(serverConfig PlaysocketConfig) {
 			ctx.SpanId = 0
 			ctx.TagId = protocol.TagId
 			ctx.TraceId = protocol.TraceId
-			ctx.ParentSpandId = protocol.SpanId
-
+			ctx.ParentSpanId = protocol.SpanId
+			ctx.Version = protocol.Version
 			err = play.RunAction(protocol.Action, ctx)
 			if serverConfig.Render != nil {
 				serverConfig.Render(protocol, ctx, err)
@@ -90,24 +90,24 @@ func listen(address string, process func(protocol *PlayProtocol), channel chan *
 func ConnectWithPlayContext(ctx *play.Context, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
 	ctx.SpanId++
 	var spanId = make([]byte, 0, 16)
-	spanId = append(spanId, ctx.ParentSpandId...)
+	spanId = append(spanId, ctx.ParentSpanId...)
 	spanId = append(spanId, ctx.SpanId)
 
-	reponseByte, err = _connect(address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
+	reponseByte, err = _connect(ctx.Version, address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
 	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
-		return _connect(address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
+		return _connect(ctx.Version, address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
 	}
 	return
 }
 
-func _connect(address string, callerId int, traceId string, spanId []byte, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+func _connect(version byte, address string, callerId int, traceId string, spanId []byte, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
 	var conn *PlayConn
 	if conn, err = GetSocketPoolBy(address).GetConn(); err != nil {
 		return nil, fmt.Errorf("unable connect %s, %w", address, err)
 	}
 	defer conn.Close()
 
-	requestByte, protocolSize := buildRequestBytes(tagId, traceId, spanId, callerId, action, message, respond)
+	requestByte, protocolSize := buildRequestBytes(version, tagId, traceId, spanId, callerId, action, message, respond)
 
 	if n, err := conn.Write(requestByte); err != nil || n != protocolSize {
 		conn.Unsable = true

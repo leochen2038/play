@@ -52,22 +52,40 @@ type PlayProtocol struct {
 
 func (p *PlayProtocol) ResponseByMessage(message []byte, rc int) error {
 	var buffer []byte
-	protocolSize := 49 + len(message)
+	if p.Version == 3 {
+		protocolSize := 49 + len(message)
 
-	buffer = append(buffer, []byte("<<==")...)
-	buffer = append(buffer, int2Bytes(protocolSize-8)...)
-	buffer = append(buffer, p.Version)
-	buffer = append(buffer, int2Bytes(p.TagId)...)
-	buffer = append(buffer, []byte(p.TraceId)...)
+		buffer = append(buffer, []byte("<<==")...)
+		buffer = append(buffer, int2Bytes(protocolSize-8)...)
+		buffer = append(buffer, p.Version)
+		buffer = append(buffer, int2Bytes(p.TagId)...)
+		buffer = append(buffer, []byte(p.TraceId)...)
 
-	buffer = append(buffer, int2Bytes(rc)...)
-	buffer = append(buffer, message...)
+		buffer = append(buffer, int2Bytes(rc)...)
+		buffer = append(buffer, message...)
 
-	n, err := p.Conn.Write(buffer)
-	if err != nil || n != protocolSize {
-		return p.Conn.Close()
+		n, err := p.Conn.Write(buffer)
+		if err != nil || n != protocolSize {
+			return p.Conn.Close()
+		}
+		return err
+	} else {
+		protocolSize := 45 + len(message)
+		messageSize := int2Bytes(protocolSize - 8)
+
+		buffer = append(buffer, []byte("==>>")...)
+		buffer = append(buffer, messageSize...)
+		buffer = append(buffer, p.Version)
+		buffer = append(buffer, int2Bytes(len(message))...)
+		buffer = append(buffer, []byte(p.TraceId)...)
+		buffer = append(buffer, message...)
+
+		n, err := p.Conn.Write(buffer)
+		if err != nil || n != protocolSize {
+			p.Conn.Close()
+		}
+		return err
 	}
-	return err
 }
 
 func MarshalRequest(protocol *PlayProtocol) ([]byte, int, error) {
@@ -144,37 +162,57 @@ func ReadResponseBytes(conn net.Conn, timeout time.Duration) ([]byte, error) {
 	}
 }
 
-func buildRequestBytes(tagId int, traceId string, spanId []byte, callerId int, action string, message []byte, respond bool) (buffer []byte, protocolSize int) {
+func buildRequestBytes(version byte, tagId int, traceId string, spanId []byte, callerId int, action string, message []byte, respond bool) (buffer []byte, protocolSize int) {
+	if version == 3 {
+		var actionLen = byte(len(action))
+		var responByte byte = 0
 
-	var version byte = 3
-	var actionLen = byte(len(action))
-	var responByte byte = 0
-
-	protocolSize = 67 + len(action) + len(message)
-	if respond {
-		responByte = 1
-	}
-
-	buffer = append(buffer, []byte("==>>")...)
-	buffer = append(buffer, int2Bytes(protocolSize-8)...)
-	buffer = append(buffer, version)
-	buffer = append(buffer, int2Bytes(tagId)...)
-	buffer = append(buffer, []byte(traceId)...)
-	if len(spanId) >= 16 {
-		buffer = append(buffer, spanId[:16]...)
-	} else {
-		buffer = append(buffer, spanId...)
-		for i := 16 - len(spanId); i > 0; i-- {
-			buffer = append(buffer, 0)
+		protocolSize = 67 + len(action) + len(message)
+		if respond {
+			responByte = 1
 		}
+
+		buffer = append(buffer, []byte("==>>")...)
+		buffer = append(buffer, int2Bytes(protocolSize-8)...)
+		buffer = append(buffer, version)
+		buffer = append(buffer, int2Bytes(tagId)...)
+		buffer = append(buffer, []byte(traceId)...)
+		if len(spanId) >= 16 {
+			buffer = append(buffer, spanId[:16]...)
+		} else {
+			buffer = append(buffer, spanId...)
+			for i := 16 - len(spanId); i > 0; i-- {
+				buffer = append(buffer, 0)
+			}
+		}
+
+		buffer = append(buffer, int2Bytes(callerId)...)
+		buffer = append(buffer, actionLen)
+		buffer = append(buffer, responByte)
+
+		buffer = append(buffer, []byte(action)...)
+		buffer = append(buffer, message...)
+	} else {
+		var version byte = 2
+		var actionLen byte = byte(len(action))
+		var responByte byte = 0
+
+		protocolSize = 49 + len(message) + len(action)
+		messageSize := int2Bytes(protocolSize - 8)
+		if respond {
+			responByte = 1
+		}
+		buffer = append(buffer, []byte("==>>")...)
+		buffer = append(buffer, messageSize...)
+		buffer = append(buffer, version)
+		buffer = append(buffer, responByte)
+		buffer = append(buffer, ushortInt2Bytes(uint16(callerId))...)
+		buffer = append(buffer, actionLen)
+		buffer = append(buffer, int2Bytes(len(message))...)
+		buffer = append(buffer, []byte(traceId)...)
+		buffer = append(buffer, []byte(action)...)
+		buffer = append(buffer, message...)
 	}
-
-	buffer = append(buffer, int2Bytes(callerId)...)
-	buffer = append(buffer, actionLen)
-	buffer = append(buffer, responByte)
-
-	buffer = append(buffer, []byte(action)...)
-	buffer = append(buffer, message...)
 
 	return
 }
@@ -185,7 +223,7 @@ func parseResponseProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 		return nil, buffer, nil
 	}
 
-	if string(buffer[:4]) != "<<==" {
+	if string(buffer[:4]) != "<<==" && string(buffer[:4]) != "==>" {
 		err := fmt.Errorf("[play server] error play socket protocol head")
 		return nil, nil, err
 	}
@@ -197,23 +235,28 @@ func parseResponseProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 	}
 
 	// 检查协议标本号
-	if buffer[8] != 3 {
-		err := fmt.Errorf("[play server] error play socket protocol version must be 3")
+	if buffer[8] != 3 && buffer[8] != 2 {
+		err := fmt.Errorf("[play server] error play socket protocol version must be 2 or 3")
 		return nil, nil, err
 	}
 
 	protocol := &PlayProtocol{}
 	protocol.Version = buffer[8]
-	protocol.TagId = bytes2Int(buffer[9:13])
-	protocol.TraceId = string(buffer[13:45])
-	protocol.Rc = bytes2Int(buffer[45:49])
-	protocol.Message = buffer[49:dataSize]
+
+	if protocol.Version == 3 {
+		protocol.TagId = bytes2Int(buffer[9:13])
+		protocol.TraceId = string(buffer[13:45])
+		protocol.Rc = bytes2Int(buffer[45:49])
+		protocol.Message = buffer[49:dataSize]
+	} else {
+		protocol.TraceId = string(buffer[13:45])
+		protocol.Message = buffer[45:dataSize]
+	}
 
 	return protocol, buffer[dataSize:], nil
 }
 
 func parseRequestProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
-	fmt.Println(buffer)
 	if len(buffer) < 8 {
 		// log.Println("[play server] buffer byte length must > 8")
 		return nil, buffer, nil
@@ -231,26 +274,36 @@ func parseRequestProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 	}
 
 	// 检查协议标本号
-	if buffer[8] != 3 {
-		err := fmt.Errorf("[play server] error play socket protocol version must be 3")
+	if buffer[8] != 3 && buffer[8] != 2 {
+		err := fmt.Errorf("[play server] error play socket protocol version must be 2 or 3")
 		return nil, nil, err
 	}
 
 	protocol := &PlayProtocol{}
 	protocol.Version = buffer[8]
-	protocol.TagId = bytes2Int(buffer[9:13])
-	protocol.TraceId = string(buffer[13:45])
-	for _, v := range buffer[45:61] {
-		if v > 0 {
-			protocol.SpanId = append(protocol.SpanId, v)
+	if protocol.Version == 3 {
+		protocol.TagId = bytes2Int(buffer[9:13])
+		protocol.TraceId = string(buffer[13:45])
+		for _, v := range buffer[45:61] {
+			if v > 0 {
+				protocol.SpanId = append(protocol.SpanId, v)
+			}
 		}
-	}
-	protocol.CallerId = bytes2Int(buffer[61:65])
-	actionEndIdx := 67 + bytes2Int(buffer[65:66])
-	protocol.Respond = buffer[66]
+		protocol.CallerId = bytes2Int(buffer[61:65])
+		actionEndIdx := 67 + bytes2Int(buffer[65:66])
+		protocol.Respond = buffer[66]
 
-	protocol.Action = string(buffer[67:actionEndIdx])
-	protocol.Message = buffer[actionEndIdx:dataLength]
+		protocol.Action = string(buffer[67:actionEndIdx])
+		protocol.Message = buffer[actionEndIdx:dataLength]
+	} else {
+		actionEndIdx := 49 + bytes2Int(buffer[12:13])
+		messageEndIdx := actionEndIdx + bytes2Int(buffer[13:17])
+		protocol.Respond = buffer[9]
+		protocol.CallerId = bytes2Int(buffer[10:12])
+		protocol.TraceId = string(buffer[17:49])
+		protocol.Action = string(buffer[49:actionEndIdx])
+		protocol.Message = buffer[actionEndIdx:messageEndIdx]
+	}
 
 	//fmt.Println(protocol.SpanId)
 	return protocol, buffer[dataLength:], nil
