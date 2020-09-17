@@ -107,6 +107,9 @@ func _connect(version byte, address string, callerId int, traceId string, spanId
 	}
 	defer conn.Close()
 
+	if traceId == "" {
+		traceId = getMicroUqid(conn.LocalAddr().String())
+	}
 	requestByte, protocolSize := buildRequestBytes(version, tagId, traceId, spanId, callerId, action, message, respond)
 
 	if n, err := conn.Write(requestByte); err != nil || n != protocolSize {
