@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"errors"
 	"github.com/leochen2038/play"
 	"github.com/tidwall/gjson"
@@ -22,6 +23,8 @@ func NewHttpParser(request *http.Request) play.Parser {
 
 	if strings.Contains(contentType, "json") {
 		raw, _ := ioutil.ReadAll(request.Body)
+		request.Body.Close()
+		request.Body = ioutil.NopCloser(bytes.NewBuffer(raw))
 		return &JsonParser{json: gjson.GetBytes(raw, "@this")}
 	}
 
