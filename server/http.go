@@ -64,7 +64,8 @@ func setHandle(serverConfig HttpConfig) {
 
 		ctx.SpanId = 0
 		ctx.TagId = 0
-		ctx.TraceId = getMicroUqid(request.Host)
+
+		ctx.TraceId = getMicroUqid("")
 		ctx.Version = 3
 
 		var action = request.URL.Path

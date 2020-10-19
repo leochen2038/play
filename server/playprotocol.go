@@ -350,7 +350,14 @@ func ushortInt2Bytes(data uint16) (ret []byte) {
 
 func getMicroUqid(localaddr string) (traceId string) {
 	var hexIp string
-	ip := localaddr[:strings.Index(localaddr, ":")]
+	var ip string
+
+	if localaddr == "" {
+		ip, _ = getIntranetIp()
+	} else {
+		ip = localaddr[:strings.Index(localaddr, ":")]
+	}
+
 	for j, i := 0, 0; i < len(ip); i++ {
 		if ip[i] == '.' {
 			hex, _ := strconv.Atoi(ip[j:i])
@@ -369,5 +376,25 @@ func getMicroUqid(localaddr string) (traceId string) {
 		traceId = fmt.Sprintf("%s%06s%08s%04x", tm.Format("20060102150405"), micro[1:], hexIp, os.Getpid()%0x10000)
 	}
 
+	return
+}
+
+func getIntranetIp() (ip string, err error) {
+	addr, err := net.InterfaceAddrs()
+	if err != nil {
+		return
+	}
+
+	for _, value := range addr {
+		if inet, ok := value.(*net.IPNet); ok && !inet.IP.IsLoopback() {
+			if inet.IP.To4() != nil && strings.HasPrefix(inet.IP.String(), "192.168") {
+				ip = inet.IP.String()
+			}
+		}
+	}
+
+	if ip == "" {
+		err = errors.New("get ip error")
+	}
 	return
 }
