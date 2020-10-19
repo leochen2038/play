@@ -62,6 +62,11 @@ func setHandle(serverConfig HttpConfig) {
 		ctx.HttpRequest = request
 		ctx.HttpResponse = writer
 
+		ctx.SpanId = 0
+		ctx.TagId = 0
+		ctx.TraceId = getMicroUqid(request.Host)
+		ctx.Version = 3
+
 		var action = request.URL.Path
 		if indexDot := strings.Index(action, "."); indexDot > 0 {
 			action = action[:indexDot]

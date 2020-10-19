@@ -131,6 +131,7 @@ func UnmarshalResponse(buffer []byte, protocol *PlayProtocol) error {
 
 func ReadResponseBytes(conn net.Conn, timeout time.Duration) ([]byte, error) {
 	var buffer = make([]byte, 4096)
+	var catchBytes []byte
 	if timeout > 0 {
 		conn.SetReadDeadline(time.Now().Add(timeout))
 	} else {
@@ -142,23 +143,26 @@ func ReadResponseBytes(conn net.Conn, timeout time.Duration) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(buffer) < 8 {
+
+		catchBytes = append(catchBytes, buffer...)
+		if len(catchBytes) < 8 {
 			continue
 		}
-		if string(buffer[:4]) != "<<==" {
+
+		dataLength := bytes2Int(catchBytes[4:8]) + 8
+		if dataLength > len(catchBytes) {
+			continue
+		}
+
+		if string(catchBytes[:4]) != "<<==" {
 			return nil, fmt.Errorf("[play server] error play socket protocol head")
 		}
 
-		dataLength := bytes2Int(buffer[4:8]) + 8
-		if dataLength > len(buffer) {
-			continue
+		if catchBytes[8] != 3 {
+			return nil, fmt.Errorf("[play server] error play socket protocol version must be 3")
 		}
 
-		if buffer[8] != 3 {
-			return nil, fmt.Errorf("[play server] error play socket protocol version must be 2")
-		}
-
-		return buffer[:dataLength], nil
+		return catchBytes[:dataLength], nil
 	}
 }
 
@@ -289,6 +293,7 @@ func parseRequestProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 				protocol.SpanId = append(protocol.SpanId, v)
 			}
 		}
+
 		protocol.CallerId = bytes2Int(buffer[61:65])
 		actionEndIdx := 67 + bytes2Int(buffer[65:66])
 		protocol.Respond = buffer[66]
