@@ -173,7 +173,7 @@ func Count(query *play.Query) (count int64, err error) {
 	}
 
 	filter := fetch(query)
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
 	count, err = collection.CountDocuments(ctx, filter)
 
 	return
