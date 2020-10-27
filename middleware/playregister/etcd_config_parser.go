@@ -33,7 +33,7 @@ func (e *EtcdParser) GetVal(key string) (val interface{}, err error) {
 				searchData = v.(map[string]interface{})
 			}
 		} else {
-			return nil, fmt.Errorf("not exist key 1 %q", key)
+			return nil, fmt.Errorf("not exist key %q", key)
 		}
 	}
 	return

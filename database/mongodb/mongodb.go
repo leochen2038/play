@@ -65,7 +65,7 @@ func GetList(dest interface{}, query *play.Query) (err error) {
 	var cursor *mongo.Cursor
 	filter := fetch(query)
 	options := findOptions(query)
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
 	if cursor, err = collection.Find(ctx, filter, options); err != nil {
 		return
 	}
@@ -159,7 +159,7 @@ func SaveList(metaList interface{}, query *play.Query) (err error) {
 		return
 	}
 	var writes []mongo.WriteModel
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
 
 	writes = append(writes, mongo.NewInsertOneModel().SetDocument(metaList))
 	_, err = collection.BulkWrite(ctx, writes)
@@ -173,7 +173,7 @@ func Count(query *play.Query) (count int64, err error) {
 	}
 
 	filter := fetch(query)
-	ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
 	count, err = collection.CountDocuments(ctx, filter)
 
 	return
