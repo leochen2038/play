@@ -19,9 +19,12 @@ import (
 )
 
 var (
-	buildId    = ""
-	intranetIp = ""
-	exePath    = ""
+	buildId       = ""
+	intranetIp    = ""
+	exePath       = ""
+	lastConfigVer = ""
+	socketListen  = ""
+	httpListen    = ""
 )
 
 func SetBuildId(id string) {
@@ -51,13 +54,17 @@ func EtcdWithArgs(configKey, runningKey string, endpoints []string) (err error) 
 	// step 2. 注册运行时状态
 	intranetIp, _ = GetIntranetIp()
 	exePath, _ = os.Executable()
-	go etcdKeepAlive(endpoints, runningKey, 3, func() string {
-		version, _ := config.String("version")
-		socketListen, _ := config.String("socketListen")
-		httpListen, _ := config.String("httpListen")
+	socketListen, _ = config.String("socketListen")
+	httpListen, _ = config.String("httpListen")
+	lastConfigVer, _ = config.String("version")
 
-		return fmt.Sprintf(`{"configVer":"%s", "buildId":"%s", "ip":"%s", "pid":%d, "path":"%s", "socketListen":"%s", "httpListen":"%s"}`,
-			version, buildId, intranetIp, os.Getpid(), exePath, socketListen, httpListen)
+	go etcdKeepAlive(endpoints, runningKey, 3, func() string {
+		if version, err := config.String("version"); err == nil && version != lastConfigVer {
+			lastConfigVer = version
+			return fmt.Sprintf(`{"configVer":"%s", "buildId":"%s", "ip":"%s", "pid":%d, "path":"%s", "socketListen":"%s", "httpListen":"%s"}`,
+				lastConfigVer, buildId, intranetIp, os.Getpid(), exePath, socketListen, httpListen)
+		}
+		return ""
 	})
 	return
 }
@@ -107,9 +114,11 @@ func etcdKeepAlive(endpoints []string, runningKey string, ttl int64, getLastVal 
 				err = errors.New("etcd close")
 				return
 			} else {
-				ctx, cancelFunc = context.WithTimeout(context.TODO(), 1*time.Second)
-				_, _ = etcdClient.Put(ctx, runningKey, getLastVal(), clientv3.WithLease(leaseResp.ID))
-				cancelFunc()
+				if newVal := getLastVal(); newVal != "" {
+					ctx, cancelFunc = context.WithTimeout(context.TODO(), 1*time.Second)
+					_, _ = etcdClient.Put(ctx, runningKey, newVal, clientv3.WithLease(leaseResp.ID))
+					cancelFunc()
+				}
 			}
 		}
 	}
