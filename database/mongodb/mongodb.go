@@ -172,8 +172,10 @@ func SaveList(metaList interface{}, query *play.Query) (err error) {
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancelFunc()
-
-	writes = append(writes, mongo.NewInsertOneModel().SetDocument(metaList))
+	
+	for _,meta := range metaList.([]interface{}) {
+		writes = append(writes, mongo.NewInsertOneModel().SetDocument(meta))
+	}
 	_, err = collection.BulkWrite(ctx, writes)
 	return
 }
