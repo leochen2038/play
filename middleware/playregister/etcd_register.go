@@ -56,17 +56,20 @@ func EtcdWithArgs(configKey, runningKey string, endpoints []string) (err error) 
 	exePath, _ = os.Executable()
 	socketListen, _ = config.String("socketListen")
 	httpListen, _ = config.String("httpListen")
-	lastConfigVer, _ = config.String("version")
 
 	go etcdKeepAlive(endpoints, runningKey, 3, func() string {
 		if version, err := config.String("version"); err == nil && version != lastConfigVer {
 			lastConfigVer = version
-			return fmt.Sprintf(`{"configVer":"%s", "buildId":"%s", "ip":"%s", "pid":%d, "path":"%s", "socketListen":"%s", "httpListen":"%s"}`,
-				lastConfigVer, buildId, intranetIp, os.Getpid(), exePath, socketListen, httpListen)
+			return etcdRunningStatus(lastConfigVer, buildId, intranetIp, exePath, socketListen, httpListen, os.Getpid())
 		}
 		return ""
 	})
 	return
+}
+
+func etcdRunningStatus(configver, buildId, intranetIp, exePath, socketListen, httpListen string, pid int) string {
+	return fmt.Sprintf(`{"configVer":"%s", "buildId":"%s", "ip":"%s", "pid":%d, "path":"%s", "socketListen":"%s", "httpListen":"%s"}`,
+		configver, buildId, intranetIp, os.Getpid(), exePath, socketListen, httpListen)
 }
 
 func etcdKeepAlive(endpoints []string, runningKey string, ttl int64, getLastVal func() string) (err error) {
@@ -103,8 +106,10 @@ func etcdKeepAlive(endpoints []string, runningKey string, ttl int64, getLastVal 
 		return
 	}
 
+	lastConfigVer, _ = config.String("version")
+	runnStatus := etcdRunningStatus(lastConfigVer, buildId, intranetIp, exePath, socketListen, httpListen, os.Getpid())
 	ctx, cancelFunc = context.WithTimeout(context.TODO(), 1*time.Second)
-	_, _ = etcdClient.Put(ctx, runningKey, getLastVal(), clientv3.WithLease(leaseResp.ID))
+	_, _ = etcdClient.Put(ctx, runningKey, runnStatus, clientv3.WithLease(leaseResp.ID))
 	cancelFunc()
 
 	for {
