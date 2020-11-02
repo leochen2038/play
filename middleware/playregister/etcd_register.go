@@ -106,8 +106,8 @@ func etcdKeepAlive(endpoints []string, runningKey string, ttl int64, getLastVal 
 
 	ctx, cancelFunc = context.WithCancel(context.TODO())
 	aliveChan, err = etcdClient.KeepAlive(ctx, leaseResp.ID)
-	cancelFunc()
 	if err != nil {
+		cancelFunc()
 		return
 	}
 
