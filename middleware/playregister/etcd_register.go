@@ -54,8 +54,12 @@ func EtcdWithArgs(configKey, runningKey string, endpoints []string) (err error) 
 	// step 2. 注册运行时状态
 	intranetIp, _ = GetIntranetIp()
 	exePath, _ = os.Executable()
-	socketListen, _ = config.String("socketListen")
-	httpListen, _ = config.String("httpListen")
+	if socketListen, _ = config.String("listen.socket"); socketListen == "" {
+		socketListen, _ = config.String("socketListen")
+	}
+	if httpListen, _ = config.String("listen.http"); httpListen == "" {
+		httpListen, _ = config.String("httpListen")
+	}
 
 	go etcdKeepAlive(endpoints, runningKey, 3, func() string {
 		if version, err := config.String("version"); err == nil && version != lastConfigVer {
@@ -101,16 +105,20 @@ func etcdKeepAlive(endpoints []string, runningKey string, ttl int64, getLastVal 
 	}
 
 	ctx, cancelFunc = context.WithCancel(context.TODO())
-	if aliveChan, err = etcdClient.KeepAlive(ctx, leaseResp.ID); err != nil {
-		cancelFunc()
+	aliveChan, err = etcdClient.KeepAlive(ctx, leaseResp.ID)
+	cancelFunc()
+	if err != nil {
 		return
 	}
 
 	lastConfigVer, _ = config.String("version")
 	runnStatus := etcdRunningStatus(lastConfigVer, buildId, intranetIp, exePath, socketListen, httpListen, os.Getpid())
 	ctx, cancelFunc = context.WithTimeout(context.TODO(), 1*time.Second)
-	_, _ = etcdClient.Put(ctx, runningKey, runnStatus, clientv3.WithLease(leaseResp.ID))
+	_, err = etcdClient.Put(ctx, runningKey, runnStatus, clientv3.WithLease(leaseResp.ID))
 	cancelFunc()
+	if err != nil {
+		return
+	}
 
 	for {
 		select {
@@ -121,8 +129,11 @@ func etcdKeepAlive(endpoints []string, runningKey string, ttl int64, getLastVal 
 			} else {
 				if newVal := getLastVal(); newVal != "" {
 					ctx, cancelFunc = context.WithTimeout(context.TODO(), 1*time.Second)
-					_, _ = etcdClient.Put(ctx, runningKey, newVal, clientv3.WithLease(leaseResp.ID))
+					_, err = etcdClient.Put(ctx, runningKey, newVal, clientv3.WithLease(leaseResp.ID))
 					cancelFunc()
+					if err != nil {
+						return
+					}
 				}
 			}
 		}

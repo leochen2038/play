@@ -86,6 +86,7 @@ func NewEtcdParser(endpoints []string, configKey string) (parser play.Parser, er
 		return
 	}
 
+	etcdParser.updateConfig(dataByte)
 	etcdParser.data = data
 	return &etcdParser, nil
 }
