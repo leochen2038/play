@@ -26,12 +26,7 @@ func BootPlaysocket(serverConfig PlaysocketConfig) {
 	if serverConfig.ProcessChan == nil && serverConfig.ProcessFunc == nil {
 		serverConfig.ProcessFunc = func(protocol *PlayProtocol) {
 			var err error
-			ctx := play.NewContextWithInput(play.NewInput(NewJsonParser(protocol.Message)))
-			ctx.SpanId = 0
-			ctx.TagId = protocol.TagId
-			ctx.TraceId = protocol.TraceId
-			ctx.ParentSpanId = protocol.SpanId
-			ctx.Version = protocol.Version
+			ctx := play.NewContext(play.NewInput(NewJsonParser(protocol.Message)), protocol.TagId, protocol.TraceId, protocol.SpanId, protocol.Version)
 			err = play.RunAction(protocol.Action, ctx)
 			if serverConfig.Render != nil {
 				serverConfig.Render(protocol, ctx, err)
@@ -88,6 +83,7 @@ func listen(address string, process func(protocol *PlayProtocol), channel chan *
 //}
 
 func ConnectWithPlayContext(ctx *play.Context, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+
 	ctx.SpanId++
 	var spanId = make([]byte, 0, 16)
 	spanId = append(spanId, ctx.ParentSpanId...)
@@ -108,7 +104,7 @@ func _connect(version byte, address string, callerId int, traceId string, spanId
 	defer conn.Close()
 
 	if traceId == "" {
-		traceId = getMicroUqid(conn.LocalAddr().String())
+		traceId = play.GetMicroUqid(conn.LocalAddr().String())
 	}
 	requestByte, protocolSize := buildRequestBytes(version, tagId, traceId, spanId, callerId, action, message, respond)
 

@@ -10,11 +10,9 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -52,7 +50,7 @@ func EtcdWithArgs(configKey, runningKey string, endpoints []string) (err error) 
 	config.InitConfig(configParser)
 
 	// step 2. 注册运行时状态
-	intranetIp, _ = GetIntranetIp()
+	intranetIp = play.GetIntranetIp()
 	exePath, _ = os.Executable()
 	if socketListen, _ = config.String("listen.socket"); socketListen == "" {
 		socketListen, _ = config.String("socketListen")
@@ -147,9 +145,7 @@ func getEtcdKeyAndEndpoints(configUrl string) (configKey, runningKey string, end
 	var responseByte []byte
 	var responseMap map[string]interface{}
 
-	if ip, err = GetIntranetIp(); err != nil {
-		return
-	}
+	ip = play.GetIntranetIp()
 	if path, err = os.Executable(); err != nil {
 		return
 	}
@@ -170,26 +166,6 @@ func getEtcdKeyAndEndpoints(configUrl string) (configKey, runningKey string, end
 	runningKey = responseMap["serviceKey"].(string)
 	for _, v := range responseMap["endpoints"].([]interface{}) {
 		endpoints = append(endpoints, v.(string))
-	}
-	return
-}
-
-func GetIntranetIp() (ip string, err error) {
-	addr, err := net.InterfaceAddrs()
-	if err != nil {
-		return
-	}
-
-	for _, value := range addr {
-		if inet, ok := value.(*net.IPNet); ok && !inet.IP.IsLoopback() {
-			if inet.IP.To4() != nil && strings.HasPrefix(inet.IP.String(), "192.168") {
-				ip = inet.IP.String()
-			}
-		}
-	}
-
-	if ip == "" {
-		err = errors.New("get ip error")
 	}
 	return
 }

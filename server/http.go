@@ -58,17 +58,9 @@ func setHandle(serverConfig HttpConfig) {
 			}
 		}()
 
-		ctx := play.NewContextWithInput(play.NewInput(NewHttpParser(request)))
-		ctx.HttpRequest = request
-		ctx.HttpResponse = writer
-
-		ctx.SpanId = 0
-		ctx.TagId = 0
-
-		ctx.TraceId = getMicroUqid("")
-		ctx.Version = 3
-
 		var action = request.URL.Path
+		ctx := play.NewContextWithHttp(play.NewInput(NewHttpParser(request)), request, writer)
+
 		if indexDot := strings.Index(action, "."); indexDot > 0 {
 			action = action[:indexDot]
 		}
