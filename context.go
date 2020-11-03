@@ -62,8 +62,8 @@ func NewContext(input *Input, tagId int, traceId string, parentSpanId []byte, ve
 	return ctx
 }
 
-func TODO() *Context {
-	ctx := &Context{Version: ProtocolVersion}
+func ContextBackground() *Context {
+	ctx := &Context{TraceId: GetMicroUqid(""), Version: ProtocolVersion}
 	return ctx
 }
 
