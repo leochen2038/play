@@ -44,7 +44,7 @@ func RunProcessor(s unsafe.Pointer, n uintptr, p Processor, ctx *Context) (strin
 }
 
 func RunAction(name string, ctx *Context) (err error) {
-	passProc := make([]Processor, 0, 4)
+	//passProc := make([]Processor, 0, 4)
 	pool, ok := actionPools[name]
 	if !ok {
 		return errors.New("can not find action:" + name)
