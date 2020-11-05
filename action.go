@@ -69,12 +69,8 @@ func RunAction(name string, ctx *Context) (err error) {
 		if ctx.doneFlag, err = currentHandler.run(currentHandler.p, ctx); err != nil {
 			return
 		}
-		passProc = append(passProc, currentHandler.p)
-	}
-
-	for _, p := range passProc {
-		if procOutputType, ok := reflect.TypeOf(p).Elem().FieldByName("Output"); ok {
-			procOutputVal := reflect.ValueOf(p).Elem().FieldByName("Output")
+		if procOutputType, ok := reflect.TypeOf(currentHandler.p).Elem().FieldByName("Output"); ok {
+			procOutputVal := reflect.ValueOf(currentHandler.p).Elem().FieldByName("Output")
 			for i := 0; i < procOutputType.Type.NumField(); i++ {
 				structType := procOutputType.Type.Field(i)
 				structValue := procOutputVal.Field(i)
@@ -85,7 +81,23 @@ func RunAction(name string, ctx *Context) (err error) {
 				ctx.Output.Set(structKey, structValue.Interface())
 			}
 		}
+		//passProc = append(passProc, currentHandler.p)
 	}
+
+	//for _, p := range passProc {
+	//	if procOutputType, ok := reflect.TypeOf(p).Elem().FieldByName("Output"); ok {
+	//		procOutputVal := reflect.ValueOf(p).Elem().FieldByName("Output")
+	//		for i := 0; i < procOutputType.Type.NumField(); i++ {
+	//			structType := procOutputType.Type.Field(i)
+	//			structValue := procOutputVal.Field(i)
+	//			structKey := structType.Tag.Get("json")
+	//			if structKey == "" {
+	//				structKey = structType.Name
+	//			}
+	//			ctx.Output.Set(structKey, structValue.Interface())
+	//		}
+	//	}
+	//}
 
 	return
 }
