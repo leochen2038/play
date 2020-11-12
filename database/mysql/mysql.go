@@ -212,7 +212,11 @@ func condtext(query *play.Query) (string, []interface{}) {
 	if len(fields) > 0 {
 		sql += " WHERE " + strings.Join(fields, " AND ")
 	}
-
+	
+	if len(query.Group) > 0 {
+		sql += " GROUP BY " + strings.Join(query.Group, ", ")
+	}
+	
 	if len(query.Order) > 0 {
 		orders := make([]string, 0, len(query.Order))
 		for _, v := range query.Order {
