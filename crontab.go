@@ -51,7 +51,7 @@ func CronStop() {
 func CronStartWithEtcd(etcd *etcd.EtcdAgent, key string, tryLocalFile string) {
 	if data, err := etcd.GetEtcdValue(key); err != nil {
 		if tryLocalFile != "" {
-			if data, err = ioutil.ReadFile(tryLocalFile); err != nil {
+			if data, err = ioutil.ReadFile(tryLocalFile); err == nil {
 				cronUpdate(data)
 			}
 		}
@@ -62,7 +62,7 @@ func CronStartWithEtcd(etcd *etcd.EtcdAgent, key string, tryLocalFile string) {
 	}
 
 	etcd.StartWatchChange(key, func(data []byte) (err error) {
-		if err = cronUpdate(data); err != nil && tryLocalFile != "" {
+		if err = cronUpdate(data); err == nil && tryLocalFile != "" {
 			err = ioutil.WriteFile(tryLocalFile, data, 0644)
 		}
 		return
