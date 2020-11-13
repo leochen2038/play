@@ -16,7 +16,7 @@ var (
 	buildId       = ""
 	intranetIp    = ""
 	exePath       = ""
-	lastConfigVer = ""
+	lastConfigVer = "0"
 	socketListen  = ""
 	httpListen    = ""
 )
@@ -51,20 +51,19 @@ func EtcdWithArgs(configKey, runningKey, crontabKey string, endpoints []string) 
 	}
 	config.InitConfig(configParser)
 
-	// step 3. 注册运行时状态
+	// step 2. 注册运行时状态
 	intranetIp = play.GetIntranetIp()
 	exePath, _ = os.Executable()
 	socketListen, _ = config.String("listen.socket")
 	httpListen, _ = config.String("listen.http")
 
-	// step 2. 开始定时任务
+	// step 3. 开始定时任务
 	play.CronStartWithEtcd(etcdAgent, crontabKey, exePath+".cron")
 
 	etcdAgent.StartKeepAlive(runningKey, 3, func() (newVal string, isChange bool, err error) {
 		var version string
-		if version, err = config.String("version"); err != nil {
-			return
-		} else if version != lastConfigVer {
+		version, _ = config.String("version")
+		if version != lastConfigVer {
 			isChange = true
 			lastConfigVer = version
 			newVal = etcdRunningStatus(lastConfigVer, buildId, intranetIp, exePath, socketListen, httpListen, os.Getpid())
