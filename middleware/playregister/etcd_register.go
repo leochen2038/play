@@ -1,19 +1,15 @@
 package playregister
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/config"
-	"go.etcd.io/etcd/clientv3"
+	"github.com/leochen2038/play/middleware/etcd"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"time"
 )
 
 var (
@@ -32,40 +28,51 @@ func SetBuildId(id string) {
 func EtcdWithUrl(configUrl string) (err error) {
 	var configKey string
 	var runningKey string
+	var crontabKey string
 	var endpoints []string
 
-	if configKey, runningKey, endpoints, err = getEtcdKeyAndEndpoints(configUrl); err == nil {
-		return EtcdWithArgs(configKey, runningKey, endpoints)
+	if configKey, runningKey, crontabKey, endpoints, err = getEtcdKeyAndEndpoints(configUrl); err == nil {
+		return EtcdWithArgs(configKey, runningKey, crontabKey, endpoints)
 	}
 
 	return
 }
 
-func EtcdWithArgs(configKey, runningKey string, endpoints []string) (err error) {
+func EtcdWithArgs(configKey, runningKey, crontabKey string, endpoints []string) (err error) {
+	var etcdAgent *etcd.EtcdAgent
+	if etcdAgent, err = etcd.NewEtcdAgent(endpoints); err != nil {
+		return
+	}
+
 	// step 1. 获取配置信息
 	var configParser play.Parser
-	if configParser, err = NewEtcdParser(endpoints, configKey); err != nil {
+	if configParser, err = config.NewEtcdParser(etcdAgent, configKey); err != nil {
 		return
 	}
 	config.InitConfig(configParser)
 
-	// step 2. 注册运行时状态
+	// step 2. 开始定时任务
+	play.CronStartWithEtcd(etcdAgent, crontabKey, exePath+".cron")
+
+	// step 3. 注册运行时状态
 	intranetIp = play.GetIntranetIp()
 	exePath, _ = os.Executable()
-	if socketListen, _ = config.String("listen.socket"); socketListen == "" {
-		socketListen, _ = config.String("socketListen")
-	}
-	if httpListen, _ = config.String("listen.http"); httpListen == "" {
-		httpListen, _ = config.String("httpListen")
-	}
+	socketListen, _ = config.String("listen.socket")
+	httpListen, _ = config.String("listen.http")
 
-	go etcdKeepAlive(endpoints, runningKey, 3, func() string {
-		if version, err := config.String("version"); err == nil && version != lastConfigVer {
+	etcdAgent.StartKeepAlive(runningKey, 3, func() (newVal string, isChange bool, err error) {
+		var version string
+		if version, err = config.String("version"); err != nil {
+			return
+		} else if version != lastConfigVer {
+			isChange = true
 			lastConfigVer = version
-			return etcdRunningStatus(lastConfigVer, buildId, intranetIp, exePath, socketListen, httpListen, os.Getpid())
+			newVal = etcdRunningStatus(lastConfigVer, buildId, intranetIp, exePath, socketListen, httpListen, os.Getpid())
+			return
 		}
-		return ""
+		return
 	})
+
 	return
 }
 
@@ -74,71 +81,7 @@ func etcdRunningStatus(configver, buildId, intranetIp, exePath, socketListen, ht
 		configver, buildId, intranetIp, os.Getpid(), exePath, socketListen, httpListen)
 }
 
-func etcdKeepAlive(endpoints []string, runningKey string, ttl int64, getLastVal func() string) (err error) {
-	defer func() {
-		if panicInfo := recover(); panicInfo != nil || err != nil {
-			log.Println("[playregister]", panicInfo, err)
-		}
-		time.Sleep(5 * time.Second)
-		go etcdKeepAlive(endpoints, runningKey, ttl, getLastVal)
-	}()
-
-	var etcdClient *clientv3.Client
-	var leaseResp *clientv3.LeaseGrantResponse
-	var aliveChan <-chan *clientv3.LeaseKeepAliveResponse
-
-	if etcdClient, err = clientv3.New(clientv3.Config{
-		Endpoints:            endpoints,
-		DialTimeout:          100 * time.Millisecond,
-		DialKeepAliveTimeout: 1 * time.Second},
-	); err != nil {
-		return
-	}
-
-	ctx, cancelFunc := context.WithTimeout(context.TODO(), 1*time.Second)
-	leaseResp, err = etcdClient.Grant(ctx, ttl)
-	cancelFunc()
-	if err != nil {
-		return
-	}
-
-	ctx, cancelFunc = context.WithCancel(context.TODO())
-	aliveChan, err = etcdClient.KeepAlive(ctx, leaseResp.ID)
-	if err != nil {
-		cancelFunc()
-		return
-	}
-
-	lastConfigVer, _ = config.String("version")
-	runnStatus := etcdRunningStatus(lastConfigVer, buildId, intranetIp, exePath, socketListen, httpListen, os.Getpid())
-	ctx, cancelFunc = context.WithTimeout(context.TODO(), 1*time.Second)
-	_, err = etcdClient.Put(ctx, runningKey, runnStatus, clientv3.WithLease(leaseResp.ID))
-	cancelFunc()
-	if err != nil {
-		return
-	}
-
-	for {
-		select {
-		case aliveResp := <-aliveChan:
-			if aliveResp == nil {
-				err = errors.New("etcd close")
-				return
-			} else {
-				if newVal := getLastVal(); newVal != "" {
-					ctx, cancelFunc = context.WithTimeout(context.TODO(), 1*time.Second)
-					_, err = etcdClient.Put(ctx, runningKey, newVal, clientv3.WithLease(leaseResp.ID))
-					cancelFunc()
-					if err != nil {
-						return
-					}
-				}
-			}
-		}
-	}
-}
-
-func getEtcdKeyAndEndpoints(configUrl string) (configKey, runningKey string, endpoints []string, err error) {
+func getEtcdKeyAndEndpoints(configUrl string) (configKey, runningKey, crontabKey string, endpoints []string, err error) {
 	var ip string
 	var path string
 	var resp *http.Response
@@ -162,8 +105,16 @@ func getEtcdKeyAndEndpoints(configUrl string) (configKey, runningKey string, end
 		return
 	}
 
-	configKey = responseMap["configKey"].(string)
-	runningKey = responseMap["serviceKey"].(string)
+	if key, ok := responseMap["configKey"]; ok {
+		configKey = key.(string)
+	}
+	if key, ok := responseMap["serviceKey"]; ok {
+		runningKey = key.(string)
+	}
+	if key, ok := responseMap["crontabKey"]; ok {
+		crontabKey = key.(string)
+	}
+
 	for _, v := range responseMap["endpoints"].([]interface{}) {
 		endpoints = append(endpoints, v.(string))
 	}
