@@ -51,14 +51,14 @@ func EtcdWithArgs(configKey, runningKey, crontabKey string, endpoints []string) 
 	}
 	config.InitConfig(configParser)
 
-	// step 2. 开始定时任务
-	play.CronStartWithEtcd(etcdAgent, crontabKey, exePath+".cron")
-
 	// step 3. 注册运行时状态
 	intranetIp = play.GetIntranetIp()
 	exePath, _ = os.Executable()
 	socketListen, _ = config.String("listen.socket")
 	httpListen, _ = config.String("listen.http")
+
+	// step 2. 开始定时任务
+	play.CronStartWithEtcd(etcdAgent, crontabKey, exePath+".cron")
 
 	etcdAgent.StartKeepAlive(runningKey, 3, func() (newVal string, isChange bool, err error) {
 		var version string
