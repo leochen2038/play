@@ -68,13 +68,15 @@ func setHandle(serverConfig HttpConfig) {
 		if action == "/" {
 			action = "/index"
 		}
+		ctx.ActionName = strings.ReplaceAll(action[1:], "/", ".")
+
 		if serverConfig.OnRequest != nil {
 			if err = serverConfig.OnRequest(ctx); err != nil {
 				goto RENDER
 			}
 		}
 
-		err = play.RunAction(strings.ReplaceAll(action[1:], "/", "."), ctx)
+		err = play.RunAction(ctx.ActionName, ctx)
 	RENDER:
 		serverConfig.Render(ctx, err)
 		return
