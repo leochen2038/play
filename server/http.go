@@ -12,8 +12,9 @@ import (
 )
 
 type HttpConfig struct {
-	Address string
-	Render  func(ctx *play.Context, err error)
+	Address   string
+	OnRequest func(ctx *play.Context) error
+	Render    func(ctx *play.Context, err error)
 }
 
 func BootHttp(serverConfig HttpConfig) {
@@ -67,10 +68,15 @@ func setHandle(serverConfig HttpConfig) {
 		if action == "/" {
 			action = "/index"
 		}
+		if serverConfig.OnRequest != nil {
+			if err = serverConfig.OnRequest(ctx); err != nil {
+				goto RENDER
+			}
+		}
 
 		err = play.RunAction(strings.ReplaceAll(action[1:], "/", "."), ctx)
+	RENDER:
 		serverConfig.Render(ctx, err)
-
 		return
 	})
 }
