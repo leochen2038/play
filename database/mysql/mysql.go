@@ -51,6 +51,7 @@ func GetList(dest interface{}, query *play.Query) (err error) {
 	where, values := condtext(query)
 
 	rows, err = conn.Query("SELECT "+fields+" FROM "+query.DBName+"."+query.Table+where, values...)
+
 	if err != nil {
 		return
 	}
@@ -155,6 +156,8 @@ func condtext(query *play.Query) (string, []interface{}) {
 				fields = append(fields, v.Field+" BETWEEN ? AND ?")
 			case "In":
 				fields = append(fields, v.Field+" IN ("+placeholders(v.Val)+")")
+			case "NotIn":
+				fields = append(fields, v.Field+" NOT IN ("+placeholders(v.Val)+")")
 			case "Like":
 				fields = append(fields, v.Field+" LIKE ?")
 			}
@@ -212,11 +215,11 @@ func condtext(query *play.Query) (string, []interface{}) {
 	if len(fields) > 0 {
 		sql += " WHERE " + strings.Join(fields, " AND ")
 	}
-	
+
 	if len(query.Group) > 0 {
 		sql += " GROUP BY " + strings.Join(query.Group, ", ")
 	}
-	
+
 	if len(query.Order) > 0 {
 		orders := make([]string, 0, len(query.Order))
 		for _, v := range query.Order {
