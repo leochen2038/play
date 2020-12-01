@@ -24,10 +24,20 @@ func NewEtcdAgent(endpoints []string) (*EtcdAgent, error) {
 	return &EtcdAgent{client: client, Endpoints: endpoints}, nil
 }
 
+func (e EtcdAgent) Put(key string, val []byte) (err error) {
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), 100*time.Millisecond)
+	_, err = e.client.Put(ctx, key, string(val))
+	if cancelFunc(); err != nil {
+		return
+	}
+	return
+}
+
 func (e EtcdAgent) GetEtcdValue(key string) (data []byte, err error) {
 	if key == "" {
 		return nil, errors.New("empty etcd key")
 	}
+
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), 100*time.Millisecond)
 	resp, err := e.client.Get(ctx, key)
 	if cancelFunc(); err != nil {
@@ -41,6 +51,28 @@ func (e EtcdAgent) GetEtcdValue(key string) (data []byte, err error) {
 	}
 
 	return nil, errors.New("unable get " + key)
+}
+
+func (e EtcdAgent) GetEtcdValueWithPrefix(prefix string) (data map[string][]byte, err error) {
+	if prefix == "" {
+		return nil, errors.New("empty etcd prefix key")
+	}
+
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), 100*time.Millisecond)
+	resp, err := e.client.Get(ctx, prefix, clientv3.WithPrefix())
+	if cancelFunc(); err != nil {
+		return
+	}
+
+	if resp.Count > 0 {
+		data = make(map[string][]byte, resp.Count)
+		for _, kv := range resp.Kvs {
+			key := string(kv.Key)
+			data[key] = kv.Value
+		}
+	}
+
+	return
 }
 
 func (e EtcdAgent) StartKeepAlive(key string, ttl int64, change func() (string, bool, error)) {
@@ -133,6 +165,43 @@ func (e EtcdAgent) watchChange(key string, changeNotify func(data []byte) error)
 				if event.Type == clientv3.EventTypePut {
 					if err := changeNotify(event.Kv.Value); err != nil {
 						log.Println("[etcd agent notify failure]", err)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (e EtcdAgent) StartWatchChangeWithPrefix(prefix string, changeNotify func(event string, key string, data []byte) error) {
+	go func() {
+		defer func() {
+			if panicInfo := recover(); panicInfo != nil {
+				log.Println("[etcd agent panic]", panicInfo)
+			}
+			time.Sleep(3 * time.Second)
+			go e.StartWatchChangeWithPrefix(prefix, changeNotify)
+		}()
+		e.watchChangeWithPrefix(prefix, changeNotify)
+	}()
+}
+
+func (e EtcdAgent) watchChangeWithPrefix(prefix string, changeNotify func(event string, key string, data []byte) error) {
+	ctx, _ := context.WithCancel(context.TODO())
+	watchChan := e.client.Watch(ctx, prefix, clientv3.WithPrefix())
+
+	for {
+		select {
+		case watchResp := <-watchChan:
+			for _, event := range watchResp.Events {
+				var ev string
+				if event.Type == clientv3.EventTypePut {
+					ev = "put"
+				} else if event.Type == clientv3.EventTypeDelete {
+					ev = "del"
+				}
+				if ev != "" {
+					if err := changeNotify(ev, string(event.Kv.Key), event.Kv.Value); err != nil {
+						log.Println("[etcd agent noitfyWithPrefix failure]", err)
 					}
 				}
 			}

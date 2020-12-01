@@ -60,6 +60,7 @@ func EtcdWithArgs(configKey, runningKey, crontabKey string, endpoints []string) 
 	// step 3. 开始定时任务
 	play.CronStartWithEtcd(etcdAgent, crontabKey, exePath+".cron")
 
+	// step 4. 监听配置信息变化
 	etcdAgent.StartKeepAlive(runningKey, 3, func() (newVal string, isChange bool, err error) {
 		var version string
 		version, _ = config.String("version")

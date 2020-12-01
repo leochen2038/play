@@ -2,6 +2,7 @@ package play
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/leochen2038/play/middleware/etcd"
 	"github.com/robfig/cron/v3"
 	"io/ioutil"
@@ -10,8 +11,9 @@ import (
 )
 
 var (
-	cronJobs   = make(map[string]*cronJobWrap, 8)
-	cronRunner *cron.Cron
+	cronLastFileModTime int64
+	cronJobs            = make(map[string]*cronJobWrap, 8)
+	cronRunner          *cron.Cron
 )
 
 type CronJob cron.Job
@@ -75,33 +77,42 @@ func CronStartWithFile(filename string, refashTickTime time.Duration) {
 	}
 
 	if refashTickTime > 0 {
-		cronWatchFileChange(filename, refashTickTime)
+		if fileinfo, err := os.Stat(filename); err == nil {
+			cronLastFileModTime = fileinfo.ModTime().Unix()
+		}
+		startCronWatchFileChange(filename, refashTickTime)
 	}
 }
 
-func cronWatchFileChange(filename string, refashTickTime time.Duration) {
+func startCronWatchFileChange(filename string, refashTickTime time.Duration) {
 	go func() {
-		var err error
-		var fileinfo os.FileInfo
-		var cronLastFileModTime int64
-		var refashTicker = time.NewTicker(refashTickTime * time.Second)
+		defer func() {
+			if panicInfo := recover(); panicInfo != nil {
+				fmt.Println("start watch cron file painc:", panicInfo)
+			}
+			time.Sleep(5 * time.Second)
+			startCronWatchFileChange(filename, refashTickTime)
+		}()
+		cronWatchFileChange(filename, refashTickTime)
+	}()
+}
 
-		if fileinfo, err = os.Stat(filename); err == nil {
-			cronLastFileModTime = fileinfo.ModTime().Unix()
-		}
+func cronWatchFileChange(filename string, refashTickTime time.Duration) {
+	var err error
+	var fileinfo os.FileInfo
+	var refashTicker = time.NewTicker(refashTickTime * time.Second)
 
-		for {
-			select {
-			case _ = <-refashTicker.C:
-				if fileinfo, err = os.Stat(filename); err == nil && fileinfo.ModTime().Unix() > cronLastFileModTime {
-					cronLastFileModTime = fileinfo.ModTime().Unix()
-					if data, err := ioutil.ReadFile(filename); err == nil {
-						cronUpdate(data)
-					}
+	for {
+		select {
+		case <-refashTicker.C:
+			if fileinfo, err = os.Stat(filename); err == nil && fileinfo.ModTime().Unix() > cronLastFileModTime {
+				cronLastFileModTime = fileinfo.ModTime().Unix()
+				if data, err := ioutil.ReadFile(filename); err == nil {
+					cronUpdate(data)
 				}
 			}
 		}
-	}()
+	}
 }
 
 func cronRemoveJob(job *cronJobWrap) {
