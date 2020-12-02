@@ -172,8 +172,8 @@ func SaveList(metaList interface{}, query *play.Query) (err error) {
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancelFunc()
-	
-	for _,meta := range metaList.([]interface{}) {
+
+	for _, meta := range metaList.([]interface{}) {
 		writes = append(writes, mongo.NewInsertOneModel().SetDocument(meta))
 	}
 	_, err = collection.BulkWrite(ctx, writes)
@@ -308,9 +308,17 @@ func fetch(query *play.Query) bson.M {
 				fieldCon["$eq"] = cond.Val
 			}
 		case "NotEqual":
-			fieldCon["$ne"] = cond.Val
+			if cond.Field == "_id" && reflect.TypeOf(cond.Val).String() == "string" {
+				fieldCon["$ne"], _ = primitive.ObjectIDFromHex(cond.Val.(string))
+			} else {
+				fieldCon["$ne"] = cond.Val
+			}
 		case "NotIn":
-			fieldCon["$nin"] = cond.Val
+			if cond.Field == "_id" && reflect.TypeOf(cond.Val).String() == "string" {
+				fieldCon["$nin"], _ = primitive.ObjectIDFromHex(cond.Val.(string))
+			} else {
+				fieldCon["$nin"] = cond.Val
+			}
 		case "Less":
 			fieldCon["$lt"] = cond.Val
 		case "Greater":

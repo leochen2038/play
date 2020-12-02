@@ -33,6 +33,15 @@ func (e EtcdAgent) Put(key string, val []byte) (err error) {
 	return
 }
 
+func (e EtcdAgent) Del(key string) (err error) {
+	ctx, cancelFunc := context.WithTimeout(context.TODO(), 100*time.Millisecond)
+	_, err = e.client.Delete(ctx, key)
+	if cancelFunc(); err != nil {
+		return
+	}
+	return
+}
+
 func (e EtcdAgent) GetEtcdValue(key string) (data []byte, err error) {
 	if key == "" {
 		return nil, errors.New("empty etcd key")
@@ -60,6 +69,7 @@ func (e EtcdAgent) GetEtcdValueWithPrefix(prefix string) (data map[string][]byte
 
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), 100*time.Millisecond)
 	resp, err := e.client.Get(ctx, prefix, clientv3.WithPrefix())
+
 	if cancelFunc(); err != nil {
 		return
 	}

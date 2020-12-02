@@ -17,13 +17,9 @@ var cacheMap map[string]map[string]interface{}
 var agent *etcd.EtcdAgent
 var preKey string
 
-func InitEtcdCache(endpoints []string, appName string) {
-	var err error
+func InitCacheWithEtcdAgent(etcdAgent *etcd.EtcdAgent, appName string) {
 	preKey = "/cache/" + appName + "/"
-
-	if agent, err = etcd.NewEtcdAgent(endpoints); err != nil {
-		return
-	}
+	agent = etcdAgent
 
 	cacheMap = make(map[string]map[string]interface{})
 	if data, err := agent.GetEtcdValueWithPrefix(preKey); err == nil {
@@ -32,18 +28,25 @@ func InitEtcdCache(endpoints []string, appName string) {
 			if err := json.Unmarshal(v, &tmp); err == nil {
 				newkey := strings.Replace(k, preKey+"map/", "", 1)
 				if newkey != k {
-					cacheMap[k] = tmp
+					cacheMap[newkey] = tmp
 				}
 			}
 		}
 	}
 
 	agent.StartWatchChangeWithPrefix(preKey, func(event string, key string, data []byte) error {
-		var tmp map[string]interface{}
-		if err := json.Unmarshal(data, &tmp); err == nil {
+		if event == "put" {
+			var tmp map[string]interface{}
+			if err := json.Unmarshal(data, &tmp); err == nil {
+				newkey := strings.Replace(key, preKey+"map/", "", 1)
+				if newkey != key {
+					cacheMap[newkey] = tmp
+				}
+			}
+		} else if event == "del" {
 			newkey := strings.Replace(key, preKey+"map/", "", 1)
 			if newkey != key {
-				cacheMap[newkey] = tmp
+				delete(cacheMap, newkey)
 			}
 		}
 		return nil
@@ -58,14 +61,13 @@ func GetMap(key string) (map[string]interface{}, error) {
 	}
 }
 
-func PutMap(key string, val map[string]interface{}, appName string) error {
-	var fullKey string
-	if appName != "" {
-		fullKey = preKey + "map/" + key
-	} else {
-		fullKey = "/cache/" + appName + "/map/" + key
-	}
-
+func PutMap(key string, val map[string]interface{}) error {
+	fullKey := preKey + "map/" + key
 	dataByte, _ := json.Marshal(val)
 	return agent.Put(fullKey, dataByte)
+}
+
+func DelMap(key string) error {
+	fullKey := preKey + "map/" + key
+	return agent.Del(fullKey)
 }
