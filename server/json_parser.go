@@ -193,6 +193,7 @@ func setValueWithGJson(tField *reflect.StructField, vField reflect.Value, value 
 	}
 	if fieldType == "bool" {
 		vField.SetBool(value.Bool())
+		return nil
 	}
 	if fieldType != "time.Time" && fieldType != "string" && value.Type.String() != "Number" {
 		if _, err := strconv.ParseFloat(value.Str, 64); err != nil {
