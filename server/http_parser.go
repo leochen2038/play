@@ -246,6 +246,12 @@ func setValueWithString(tField *reflect.StructField, vField reflect.Value, value
 	switch fieldType {
 	case "interface {}":
 		vField.Set(reflect.ValueOf(value))
+	case "bool":
+		if b, err := strconv.ParseBool(value); err != nil {
+			return err
+		} else {
+			vField.SetBool(b)
+		}
 	case "string":
 		vField.SetString(value)
 	case "int8":
