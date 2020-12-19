@@ -161,7 +161,7 @@ func accept(conn net.Conn, process func(protocol *PlayProtocol), channel chan *P
 			log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 			return
 		}
-
+		next = true
 		surplus = append(surplus, buffer[:n]...)
 		for next {
 			protocol, surplus, next, err = parseRequestProtocol(surplus)
