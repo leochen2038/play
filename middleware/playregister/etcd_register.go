@@ -66,7 +66,7 @@ func EtcdWithArgs(configKey, runningKey, crontabKey string, endpoints []string) 
 		cache.InitCacheWithEtcdAgent(etcdAgent, appName)
 	}
 
-	// step 5. 监听配置信息变化
+	// step 5. 监听运行时状态变化
 	etcdAgent.StartKeepAlive(runningKey, 3, func() (newVal string, isChange bool, err error) {
 		var version string
 		version, _ = config.String("version")

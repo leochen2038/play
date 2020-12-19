@@ -151,7 +151,7 @@ func _connect(version byte, address string, callerId int, traceId string, spanId
 func accept(conn net.Conn, process func(protocol *PlayProtocol), channel chan *PlayProtocol) {
 	var surplus []byte
 	var protocol *PlayProtocol
-
+	var next = true
 	var buffer = make([]byte, 4096)
 	defer conn.Close()
 
@@ -161,27 +161,31 @@ func accept(conn net.Conn, process func(protocol *PlayProtocol), channel chan *P
 			log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 			return
 		}
-		protocol, surplus, err = parseRequestProtocol(append(surplus, buffer[:n]...))
-		if err != nil {
-			log.Println("[play server]", err, "on", conn.RemoteAddr().String())
-			return
-		}
-		if protocol != nil {
-			wg.Add(1)
-			protocol.Conn = conn
-			if process != nil {
-				func() {
-					defer func() {
-						if panicInfo := recover(); panicInfo != nil {
-							log.Fatal(fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack())))
-						}
-					}()
-					process(protocol)
-				}()
-			} else if channel != nil {
-				channel <- protocol
+
+		surplus = append(surplus, buffer[:n]...)
+		for next {
+			protocol, surplus, next, err = parseRequestProtocol(surplus)
+			if err != nil {
+				log.Println("[play server]", err, "on", conn.RemoteAddr().String())
+				return
 			}
-			wg.Done()
+			if protocol != nil {
+				wg.Add(1)
+				protocol.Conn = conn
+				if process != nil {
+					func() {
+						defer func() {
+							if panicInfo := recover(); panicInfo != nil {
+								log.Fatal(fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack())))
+							}
+						}()
+						process(protocol)
+					}()
+				} else if channel != nil {
+					channel <- protocol
+				}
+				wg.Done()
+			}
 		}
 	}
 }

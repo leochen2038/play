@@ -256,27 +256,27 @@ func parseResponseProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 	return protocol, buffer[dataSize:], nil
 }
 
-func parseRequestProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
+func parseRequestProtocol(buffer []byte) (*PlayProtocol, []byte, bool, error) {
 	if len(buffer) < 8 {
 		// log.Println("[play server] buffer byte length must > 8")
-		return nil, buffer, nil
+		return nil, buffer, false, nil
 	}
 
 	if string(buffer[:4]) != "==>>" {
 		err := fmt.Errorf("[play server] error play socket protocol head")
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	dataLength := bytes2Int(buffer[4:8]) + 8
 	if dataLength > len(buffer) {
 		// log.Printf("[play server] play socket protocol data length recv:%d, need:%d\n", len(buffer), dataLength)
-		return nil, buffer, nil
+		return nil, buffer, false, nil
 	}
 
 	// 检查协议标本号
 	if buffer[8] != 3 && buffer[8] != 2 {
 		err := fmt.Errorf("[play server] error play socket protocol version must be 2 or 3")
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	protocol := &PlayProtocol{}
@@ -307,7 +307,7 @@ func parseRequestProtocol(buffer []byte) (*PlayProtocol, []byte, error) {
 	}
 
 	//fmt.Println(protocol.SpanId)
-	return protocol, buffer[dataLength:], nil
+	return protocol, buffer[dataLength:], true, nil
 }
 
 func bytes2Int(data []byte) int {
