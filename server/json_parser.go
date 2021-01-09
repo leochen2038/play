@@ -227,9 +227,15 @@ func setValueWithGJson(tField *reflect.StructField, vField reflect.Value, value 
 		if value.Type.String() != "Number" {
 			layout := tField.Tag.Get("layout")
 			if layout != "" {
-				local, _ := time.LoadLocation("Local")
-				time.ParseInLocation(layout, value.String(), local)
-				if v, err := time.Parse(layout, value.String()); err != nil {
+				location := "Local"
+				if zone := tField.Tag.Get("zone"); zone != "" {
+					location = zone
+				}
+				local, err := time.LoadLocation(location)
+				if err != nil {
+					return err
+				}
+				if v, err := time.ParseInLocation(layout, value.String(), local); err != nil {
 					return err
 				} else {
 					vField.Set(reflect.ValueOf(v))
