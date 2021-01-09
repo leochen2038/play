@@ -314,8 +314,22 @@ func fetch(query *play.Query) bson.M {
 				fieldCon["$ne"] = cond.Val
 			}
 		case "NotIn":
-			if cond.Field == "_id" && reflect.TypeOf(cond.Val).String() == "string" {
-				fieldCon["$nin"], _ = primitive.ObjectIDFromHex(cond.Val.(string))
+			if cond.Field == "_id" {
+				if reflect.TypeOf(cond.Val).String() == "[]interface {}" {
+					list := make([]primitive.ObjectID, 0, 1)
+					for _, v := range cond.Val.([]interface{}) {
+						switch v.(type) {
+						case primitive.ObjectID:
+							list = append(list, v.(primitive.ObjectID))
+						case string:
+							obj, _ := primitive.ObjectIDFromHex(v.(string))
+							list = append(list, obj)
+						}
+					}
+					fieldCon["$nin"] = list
+				} else {
+					fieldCon["$nin"] = cond.Val
+				}
 			} else {
 				fieldCon["$nin"] = cond.Val
 			}
