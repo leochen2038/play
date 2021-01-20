@@ -5,14 +5,14 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
 
 var (
-	ProtocolVersion byte = 3
+	ProtocolVersion byte   = 3
+	intranetIp      net.IP = nil
 )
 
 type Context struct {
@@ -67,22 +67,29 @@ func ContextBackground() *Context {
 	return ctx
 }
 
-func GetIntranetIp() string {
-	var ip string = "127.0.0.1"
-	addr, err := net.InterfaceAddrs()
-	if err != nil {
-		return ip
-	}
+func GetIntranetIp() net.IP {
+	if intranetIp == nil {
+		var err error
+		var addr []net.Addr
 
-	for _, value := range addr {
-		if inet, ok := value.(*net.IPNet); ok && !inet.IP.IsLoopback() {
-			if inet.IP.To4() != nil && strings.HasPrefix(inet.IP.String(), "192.168") {
-				ip = inet.IP.String()
+		if addr, err = net.InterfaceAddrs(); err != nil {
+			intranetIp = net.IPv4(127, 0, 0, 1)
+			goto DONE
+		}
+
+		for _, value := range addr {
+			if inet, ok := value.(*net.IPNet); ok && !inet.IP.IsLoopback() {
+				if ipv4 := inet.IP.To4(); ipv4 != nil {
+					if ipv4[0] == 10 || (ipv4[0] == 192 && ipv4[1] == 168) || (ipv4[0] == 172 && ipv4[1] >= 16 && ipv4[1] <= 31) {
+						intranetIp = inet.IP
+						break
+					}
+				}
 			}
 		}
 	}
-
-	return ip
+DONE:
+	return intranetIp
 }
 
 func GetMicroUqid(localaddr string) (traceId string) {
@@ -90,20 +97,22 @@ func GetMicroUqid(localaddr string) (traceId string) {
 	var ip string
 
 	if localaddr == "" {
-		ip = GetIntranetIp()
+		ipv4 := GetIntranetIp()
+		for _, v := range ipv4 {
+			hexIp += fmt.Sprintf("%02x", v)
+		}
 	} else {
 		ip = localaddr[:strings.Index(localaddr, ":")]
-	}
-
-	for j, i := 0, 0; i < len(ip); i++ {
-		if ip[i] == '.' {
-			hex, _ := strconv.Atoi(ip[j:i])
-			hexIp += fmt.Sprintf("%02x", hex)
-			j = i + 1
+		for j, i := 0, 0; i < len(ip); i++ {
+			if ip[i] == '.' {
+				hex, _ := strconv.Atoi(ip[j:i])
+				hexIp += fmt.Sprintf("%02x", hex)
+				j = i + 1
+			}
 		}
 	}
 
-	runtime.Gosched()
+	//	runtime.Gosched()
 	tm := time.Now()
 	micro := tm.Format(".000000")
 
