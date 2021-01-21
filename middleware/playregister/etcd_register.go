@@ -53,7 +53,7 @@ func EtcdWithArgs(configKey, runningKey, crontabKey string, endpoints []string) 
 	config.InitConfig(configParser)
 
 	// step 2. 注册运行时状态
-	intranetIp = play.GetIntranetIp()
+	intranetIp = play.GetIntranetIp().String()
 	exePath, _ = os.Executable()
 	socketListen, _ = config.String("listen.socket")
 	httpListen, _ = config.String("listen.http")
@@ -94,7 +94,7 @@ func getEtcdKeyAndEndpoints(configUrl string) (configKey, runningKey, crontabKey
 	var responseByte []byte
 	var responseMap map[string]interface{}
 
-	ip = play.GetIntranetIp()
+	ip = play.GetIntranetIp().String()
 	if path, err = os.Executable(); err != nil {
 		return
 	}
