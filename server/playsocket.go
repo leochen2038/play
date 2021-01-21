@@ -16,29 +16,37 @@ import (
 var noDeadline time.Time
 
 type PlaysocketConfig struct {
-	Address     string
-	Render      func(protocol *PlayProtocol, ctx *play.Context, err error)
-	OnRequest   func(protocol *PlayProtocol) (err error)
-	ProcessFunc func(protocal *PlayProtocol)
-	ProcessChan chan *PlayProtocol
+	Address   string
+	DoRender  func(protocol *PlayProtocol, ctx *play.Context, err error)
+	OnRequest func(ctx *play.Context) (err error)
+	//ProcessFunc func(protocal *PlayProtocol)
+	//ProcessChan chan *PlayProtocol
 }
 
 func BootPlaysocket(serverConfig PlaysocketConfig) {
-	if serverConfig.ProcessChan == nil && serverConfig.ProcessFunc == nil {
-		serverConfig.ProcessFunc = func(protocol *PlayProtocol) {
-			var err error
-			ctx := play.NewContext(play.NewInput(NewJsonParser(protocol.Message)), protocol.TagId, protocol.TraceId, protocol.SpanId, protocol.Version)
+	processFunc := func(protocol *PlayProtocol) {
+		var err error
+		var ctx *play.Context
+
+		ctx = play.NewContext(play.NewInput(NewJsonParser(protocol.Message)), protocol.TagId, protocol.TraceId, protocol.SpanId, protocol.Version)
+		ctx.ActionName = protocol.Action
+
+		if serverConfig.OnRequest != nil {
+			err = serverConfig.OnRequest(ctx)
+		}
+		if err == nil {
 			err = play.RunAction(protocol.Action, ctx)
-			if serverConfig.Render != nil {
-				serverConfig.Render(protocol, ctx, err)
-			}
+		}
+
+		if serverConfig.DoRender != nil {
+			serverConfig.DoRender(protocol, ctx, err)
 		}
 	}
 
-	listen(serverConfig.Address, serverConfig.OnRequest, serverConfig.ProcessFunc, serverConfig.ProcessChan)
+	listen(serverConfig.Address, processFunc, nil)
 }
 
-func listen(address string, onRequest func(protocol *PlayProtocol) (err error), process func(protocol *PlayProtocol), channel chan *PlayProtocol) {
+func listen(address string, process func(protocol *PlayProtocol), channel chan *PlayProtocol) {
 	var err error
 	if os.Getenv(envGraceful) != "" {
 		id := getGracefulSocket(1)
@@ -62,26 +70,19 @@ func listen(address string, onRequest func(protocol *PlayProtocol) (err error), 
 		}
 		log.Println("[sokcet server] listen success on", address)
 	}
-
 	defer playListener.Close()
+
 	for {
 		var conn net.Conn
 		if conn, err = playListener.Accept(); err != nil {
 			continue
 		}
+
 		log.Println("[play server]", conn.RemoteAddr().String(), "connect success")
-		go accept(conn, onRequest, process, channel)
+		go accept(conn, process, channel)
 	}
 
 }
-
-//func Connect(address string, callerId int, traceId string, spanId []byte, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
-//	reponseByte, err = _connect(address, callerId, traceId, spanId, tagId, action, message, respond, timeout)
-//	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
-//		return _connect(address, callerId, traceId, spanId, tagId, action, message, respond, timeout)
-//	}
-//	return
-//}
 
 func ConnectWithPlayContext(ctx *play.Context, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
 
@@ -92,6 +93,7 @@ func ConnectWithPlayContext(ctx *play.Context, callerId int, address string, act
 
 	reponseByte, err = _connect(ctx.Version, address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
 	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
+		// try agent
 		return _connect(ctx.Version, address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
 	}
 	return
@@ -149,7 +151,7 @@ func _connect(version byte, address string, callerId int, traceId string, spanId
 	return nil, nil
 }
 
-func accept(conn net.Conn, onRequest func(protocol *PlayProtocol) (err error), process func(protocol *PlayProtocol), channel chan *PlayProtocol) {
+func accept(conn net.Conn, process func(protocol *PlayProtocol), channel chan *PlayProtocol) {
 	var surplus []byte
 	var protocol *PlayProtocol
 	var next = true
@@ -180,9 +182,6 @@ func accept(conn net.Conn, onRequest func(protocol *PlayProtocol) (err error), p
 								log.Fatal(fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack())))
 							}
 						}()
-						if onRequest != nil {
-							_ = onRequest(protocol)
-						}
 						process(protocol)
 					}()
 				} else if channel != nil {
