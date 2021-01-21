@@ -1,10 +1,13 @@
 package play
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -67,6 +70,16 @@ func ContextBackground() *Context {
 	return ctx
 }
 
+func Generate28Id(prefix string) string {
+	var x uint16
+	var timeNow = time.Now()
+
+	ipv4 := GetIntranetIp().To4()
+	bytesBuffer := bytes.NewBuffer(ipv4[2:])
+	_ = binary.Read(bytesBuffer, binary.BigEndian, &x)
+	return prefix + timeNow.Format("20060102150405") + fmt.Sprintf("%05d%04d%05d", x%0xffff, GetGoroutineID()%10000, timeNow.UnixNano()/1e3%100000)
+}
+
 func GetIntranetIp() net.IP {
 	if intranetIp == nil {
 		var err error
@@ -123,4 +136,13 @@ func GetMicroUqid(localaddr string) (traceId string) {
 	}
 
 	return
+}
+
+func GetGoroutineID() uint64 {
+	b := make([]byte, 64)
+	runtime.Stack(b, false)
+	b = bytes.TrimPrefix(b, []byte("goroutine "))
+	b = b[:bytes.IndexByte(b, ' ')]
+	n, _ := strconv.ParseUint(string(b), 10, 64)
+	return n
 }
