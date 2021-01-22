@@ -31,7 +31,7 @@ func getConnect(dest string) (*mongo.Client, error) {
 			mongoURI = scheme + "://" + username + ":" + password + "@" + host
 		}
 
-		if dbconnect, err = mongo.NewClient(options.Client().ApplyURI(mongoURI).SetMaxPoolSize(32)); err != nil {
+		if dbconnect, err = mongo.NewClient(options.Client().ApplyURI(mongoURI).SetMaxPoolSize(1024)); err != nil {
 			return nil, err
 		}
 		if err = dbconnect.Connect(ctx); err != nil {
