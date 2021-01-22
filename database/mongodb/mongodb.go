@@ -96,6 +96,28 @@ func GetOne(dest interface{}, query *play.Query) (err error) {
 	return
 }
 
+func UpdateAndGetOne(dest interface{}, query *play.Query) (err error) {
+	var collection *mongo.Collection
+	if collection, err = getCollection(query); err != nil {
+		return
+	}
+
+	fmtime := make([]interface{}, 0, 1)
+	fmtime = append(fmtime, time.Now().Unix())
+	query.Sets["Fmtime"] = fmtime
+
+	filter := fetch(query)
+	update := modifier(query)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancelFunc()
+
+	err = collection.FindOneAndUpdate(ctx, filter, update).Decode(dest)
+	if err == mongo.ErrNoDocuments {
+		return play.ErrQueryEmptyResult
+	}
+	return
+}
+
 func Save(meta interface{}, upsetId *primitive.ObjectID, query *play.Query) (err error) {
 	var collection *mongo.Collection
 	if collection, err = getCollection(query); err != nil {
