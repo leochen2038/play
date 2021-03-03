@@ -3,6 +3,7 @@ package play
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"runtime/debug"
 	"sync"
 	"unsafe"
@@ -43,6 +44,7 @@ func RunProcessor(s unsafe.Pointer, n uintptr, p Processor, ctx *Context) (strin
 }
 
 func RunAction(name string, ctx *Context) (err error) {
+	//passProc := make([]Processor, 0, 4)
 	pool, ok := actionPools[name]
 	if !ok {
 		return errors.New("can not find action:" + name)
@@ -50,8 +52,9 @@ func RunAction(name string, ctx *Context) (err error) {
 
 	ihandler := pool.Get()
 	if ihandler == nil {
-		return
+		return errors.New("can not get action handle from pool:" + name)
 	}
+
 	defer func() {
 		pool.Put(ihandler)
 		if panicInfo := recover(); panicInfo != nil {
@@ -66,7 +69,35 @@ func RunAction(name string, ctx *Context) (err error) {
 		if ctx.doneFlag, err = currentHandler.run(currentHandler.p, ctx); err != nil {
 			return
 		}
+		if procOutputType, ok := reflect.TypeOf(currentHandler.p).Elem().FieldByName("Output"); ok {
+			procOutputVal := reflect.ValueOf(currentHandler.p).Elem().FieldByName("Output")
+			for i := 0; i < procOutputType.Type.NumField(); i++ {
+				structType := procOutputType.Type.Field(i)
+				structValue := procOutputVal.Field(i)
+				structKey := structType.Tag.Get("json")
+				if structKey == "" {
+					structKey = structType.Name
+				}
+				ctx.Output.Set(structKey, structValue.Interface())
+			}
+		}
+		//passProc = append(passProc, currentHandler.p)
 	}
+
+	//for _, p := range passProc {
+	//	if procOutputType, ok := reflect.TypeOf(p).Elem().FieldByName("Output"); ok {
+	//		procOutputVal := reflect.ValueOf(p).Elem().FieldByName("Output")
+	//		for i := 0; i < procOutputType.Type.NumField(); i++ {
+	//			structType := procOutputType.Type.Field(i)
+	//			structValue := procOutputVal.Field(i)
+	//			structKey := structType.Tag.Get("json")
+	//			if structKey == "" {
+	//				structKey = structType.Name
+	//			}
+	//			ctx.Output.Set(structKey, structValue.Interface())
+	//		}
+	//	}
+	//}
 
 	return
 }

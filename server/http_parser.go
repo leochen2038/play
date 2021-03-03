@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"errors"
 	"github.com/leochen2038/play"
 	"github.com/tidwall/gjson"
@@ -22,6 +23,8 @@ func NewHttpParser(request *http.Request) play.Parser {
 
 	if strings.Contains(contentType, "json") {
 		raw, _ := ioutil.ReadAll(request.Body)
+		request.Body.Close()
+		request.Body = ioutil.NopCloser(bytes.NewBuffer(raw))
 		return &JsonParser{json: gjson.GetBytes(raw, "@this")}
 	}
 
@@ -60,7 +63,10 @@ func (i *HttpParser) GetVal(key string) (interface{}, error) {
 }
 
 func (h *HttpParser) Bind(obj interface{}) (err error) {
-	return h.bindHttpValues(reflect.TypeOf(obj).Elem(), reflect.ValueOf(obj).Elem())
+	if vInput := reflect.ValueOf(obj).Elem().FieldByName("Input"); vInput.CanSet() {
+		return h.bindHttpValues(vInput.Type(), vInput)
+	}
+	return
 }
 
 func (h *HttpParser) bindHttpValues(t reflect.Type, v reflect.Value) (err error) {
@@ -240,6 +246,12 @@ func setValueWithString(tField *reflect.StructField, vField reflect.Value, value
 	switch fieldType {
 	case "interface {}":
 		vField.Set(reflect.ValueOf(value))
+	case "bool":
+		if b, err := strconv.ParseBool(value); err != nil {
+			return err
+		} else {
+			vField.SetBool(b)
+		}
 	case "string":
 		vField.SetString(value)
 	case "int8":

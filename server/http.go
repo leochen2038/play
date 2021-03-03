@@ -12,8 +12,9 @@ import (
 )
 
 type HttpConfig struct {
-	Address string
-	Render  func(ctx *play.Context, err error)
+	Address   string
+	OnRequest func(ctx *play.Context) error
+	Render    func(ctx *play.Context, err error)
 }
 
 func BootHttp(serverConfig HttpConfig) {
@@ -58,21 +59,26 @@ func setHandle(serverConfig HttpConfig) {
 			}
 		}()
 
-		ctx := play.NewContextWithInput(play.NewInput(NewHttpParser(request)))
-		ctx.HttpRequest = request
-		ctx.HttpResponse = writer
-
 		var action = request.URL.Path
+		ctx := play.NewContextWithHttp(play.NewInput(NewHttpParser(request)), request, writer)
+
 		if indexDot := strings.Index(action, "."); indexDot > 0 {
 			action = action[:indexDot]
 		}
 		if action == "/" {
 			action = "/index"
 		}
+		ctx.ActionName = strings.ReplaceAll(action[1:], "/", ".")
 
-		err = play.RunAction(strings.ReplaceAll(action[1:], "/", "."), ctx)
+		if serverConfig.OnRequest != nil {
+			if err = serverConfig.OnRequest(ctx); err != nil {
+				goto RENDER
+			}
+		}
+
+		err = play.RunAction(ctx.ActionName, ctx)
+	RENDER:
 		serverConfig.Render(ctx, err)
-
 		return
 	})
 }

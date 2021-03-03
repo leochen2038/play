@@ -19,5 +19,6 @@ type Query struct {
 	Fields        map[string]bool
 	Order         [][2]string
 	Limit         [2]int64
+	Group         []string
 	Router        string
 }

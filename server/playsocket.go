@@ -16,25 +16,34 @@ import (
 var noDeadline time.Time
 
 type PlaysocketConfig struct {
-	Address     string
-	Render      func(protocol *PlayProtocol, ctx *play.Context, err error)
-	ProcessFunc func(protocal *PlayProtocol)
-	ProcessChan chan *PlayProtocol
+	Address   string
+	DoRender  func(protocol *PlayProtocol, ctx *play.Context, err error)
+	OnRequest func(ctx *play.Context) (err error)
+	//ProcessFunc func(protocal *PlayProtocol)
+	//ProcessChan chan *PlayProtocol
 }
 
 func BootPlaysocket(serverConfig PlaysocketConfig) {
-	if serverConfig.ProcessChan == nil && serverConfig.ProcessFunc == nil {
-		serverConfig.ProcessFunc = func(protocol *PlayProtocol) {
-			var err error
-			ctx := play.NewContextWithInput(play.NewInput(NewJsonParser(protocol.Message)))
+	processFunc := func(protocol *PlayProtocol) {
+		var err error
+		var ctx *play.Context
+
+		ctx = play.NewContext(play.NewInput(NewJsonParser(protocol.Message)), protocol.TagId, protocol.TraceId, protocol.SpanId, protocol.Version)
+		ctx.ActionName = protocol.Action
+
+		if serverConfig.OnRequest != nil {
+			err = serverConfig.OnRequest(ctx)
+		}
+		if err == nil {
 			err = play.RunAction(protocol.Action, ctx)
-			if serverConfig.Render != nil {
-				serverConfig.Render(protocol, ctx, err)
-			}
+		}
+
+		if serverConfig.DoRender != nil {
+			serverConfig.DoRender(protocol, ctx, err)
 		}
 	}
 
-	listen(serverConfig.Address, serverConfig.ProcessFunc, serverConfig.ProcessChan)
+	listen(serverConfig.Address, processFunc, nil)
 }
 
 func listen(address string, process func(protocol *PlayProtocol), channel chan *PlayProtocol) {
@@ -61,36 +70,46 @@ func listen(address string, process func(protocol *PlayProtocol), channel chan *
 		}
 		log.Println("[sokcet server] listen success on", address)
 	}
-
 	defer playListener.Close()
+
 	for {
 		var conn net.Conn
 		if conn, err = playListener.Accept(); err != nil {
 			continue
 		}
+
 		log.Println("[play server]", conn.RemoteAddr().String(), "connect success")
 		go accept(conn, process, channel)
 	}
 
 }
 
-func Connect(address string, callerId uint16, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
-	reponseByte, err = _connect(address, callerId, action, message, respond, timeout)
+func ConnectWithPlayContext(ctx *play.Context, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+
+	ctx.SpanId++
+	var spanId = make([]byte, 0, 16)
+	spanId = append(spanId, ctx.ParentSpanId...)
+	spanId = append(spanId, ctx.SpanId)
+
+	reponseByte, err = _connect(ctx.Version, address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
 	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || err == io.EOF {
-		return _connect(address, callerId, action, message, respond, timeout)
+		// try agent
+		return _connect(ctx.Version, address, callerId, ctx.TraceId, spanId, ctx.TagId, action, message, respond, timeout)
 	}
 	return
 }
 
-func _connect(address string, callerId uint16, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+func _connect(version byte, address string, callerId int, traceId string, spanId []byte, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
 	var conn *PlayConn
 	if conn, err = GetSocketPoolBy(address).GetConn(); err != nil {
 		return nil, fmt.Errorf("unable connect %s, %w", address, err)
 	}
 	defer conn.Close()
 
-	requestId := getMicroUqid(conn.LocalAddr().String())
-	requestByte, protocolSize := buildRequest(requestId, callerId, action, message, respond)
+	if traceId == "" {
+		traceId = play.GetMicroUqid(conn.LocalAddr().String())
+	}
+	requestByte, protocolSize := buildRequestBytes(version, tagId, traceId, spanId, callerId, action, message, respond)
 
 	if n, err := conn.Write(requestByte); err != nil || n != protocolSize {
 		conn.Unsable = true
@@ -113,16 +132,16 @@ func _connect(address string, callerId uint16, action string, message []byte, re
 				log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 				return nil, err
 			}
-			protocol, surplus, err = parseResponse(append(surplus, buffer[:n]...))
+			protocol, surplus, err = parseResponseProtocol(append(surplus, buffer[:n]...))
 			if err != nil {
 				conn.Unsable = true
 				log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 				return nil, err
 			}
 			if protocol != nil {
-				if protocol.requestId != requestId {
+				if protocol.TraceId != traceId {
 					conn.Unsable = true
-					return nil, fmt.Errorf("protocol err expect %s but %s", requestId, protocol.requestId)
+					return nil, fmt.Errorf("protocol err expect %s but %s", traceId, protocol.TraceId)
 				}
 				return protocol.Message, nil
 			}
@@ -135,7 +154,7 @@ func _connect(address string, callerId uint16, action string, message []byte, re
 func accept(conn net.Conn, process func(protocol *PlayProtocol), channel chan *PlayProtocol) {
 	var surplus []byte
 	var protocol *PlayProtocol
-
+	var next = true
 	var buffer = make([]byte, 4096)
 	defer conn.Close()
 
@@ -145,28 +164,31 @@ func accept(conn net.Conn, process func(protocol *PlayProtocol), channel chan *P
 			log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 			return
 		}
-		protocol, surplus, err = parseProtocol(append(surplus, buffer[:n]...))
-		if err != nil {
-			log.Println("[play server]", err, "on", conn.RemoteAddr().String())
-			return
-		}
-		if protocol != nil {
-			wg.Add(1)
-			protocol.Conn = conn
-			if process != nil {
-				func() {
-					defer func() {
-						if panicInfo := recover(); panicInfo != nil {
-							log.Fatal(fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack())))
-						}
-					}()
-					process(protocol)
-				}()
-
-			} else if channel != nil {
-				channel <- protocol
+		next = true
+		surplus = append(surplus, buffer[:n]...)
+		for next {
+			protocol, surplus, next, err = parseRequestProtocol(surplus)
+			if err != nil {
+				log.Println("[play server]", err, "on", conn.RemoteAddr().String())
+				return
 			}
-			wg.Done()
+			if protocol != nil {
+				wg.Add(1)
+				protocol.Conn = conn
+				if process != nil {
+					func() {
+						defer func() {
+							if panicInfo := recover(); panicInfo != nil {
+								log.Fatal(fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack())))
+							}
+						}()
+						process(protocol)
+					}()
+				} else if channel != nil {
+					channel <- protocol
+				}
+				wg.Done()
+			}
 		}
 	}
 }

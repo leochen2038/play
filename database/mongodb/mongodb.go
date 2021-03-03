@@ -31,7 +31,7 @@ func getConnect(dest string) (*mongo.Client, error) {
 			mongoURI = scheme + "://" + username + ":" + password + "@" + host
 		}
 
-		if dbconnect, err = mongo.NewClient(options.Client().ApplyURI(mongoURI).SetMaxPoolSize(32)); err != nil {
+		if dbconnect, err = mongo.NewClient(options.Client().ApplyURI(mongoURI).SetMaxPoolSize(1024)); err != nil {
 			return nil, err
 		}
 		if err = dbconnect.Connect(ctx); err != nil {
@@ -65,7 +65,9 @@ func GetList(dest interface{}, query *play.Query) (err error) {
 	var cursor *mongo.Cursor
 	filter := fetch(query)
 	options := findOptions(query)
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelFunc()
+
 	if cursor, err = collection.Find(ctx, filter, options); err != nil {
 		return
 	}
@@ -84,8 +86,32 @@ func GetOne(dest interface{}, query *play.Query) (err error) {
 
 	filter := fetch(query)
 	options := findOneOptions(query)
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelFunc()
+
 	err = collection.FindOne(ctx, filter, options).Decode(dest)
+	if err == mongo.ErrNoDocuments {
+		return play.ErrQueryEmptyResult
+	}
+	return
+}
+
+func UpdateAndGetOne(dest interface{}, query *play.Query) (err error) {
+	var collection *mongo.Collection
+	if collection, err = getCollection(query); err != nil {
+		return
+	}
+
+	fmtime := make([]interface{}, 0, 1)
+	fmtime = append(fmtime, time.Now().Unix())
+	query.Sets["Fmtime"] = fmtime
+
+	filter := fetch(query)
+	update := modifier(query)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancelFunc()
+
+	err = collection.FindOneAndUpdate(ctx, filter, update).Decode(dest)
 	if err == mongo.ErrNoDocuments {
 		return play.ErrQueryEmptyResult
 	}
@@ -98,7 +124,9 @@ func Save(meta interface{}, upsetId *primitive.ObjectID, query *play.Query) (err
 		return
 	}
 
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelFunc()
+
 	if upsetId == nil {
 		_, err = collection.InsertOne(ctx, meta)
 	} else {
@@ -123,7 +151,9 @@ func Delete(query *play.Query) (modcount int64, err error) {
 
 	filter := fetch(query)
 
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelFunc()
+
 	if result, err = collection.DeleteMany(ctx, filter); err != nil {
 		return
 	}
@@ -145,7 +175,9 @@ func Update(query *play.Query) (modcount int64, err error) {
 
 	filter := fetch(query)
 	update := modifier(query)
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelFunc()
+
 	if result, err = collection.UpdateMany(ctx, filter, update); err != nil {
 		return
 	}
@@ -159,9 +191,13 @@ func SaveList(metaList interface{}, query *play.Query) (err error) {
 		return
 	}
 	var writes []mongo.WriteModel
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 
-	writes = append(writes, mongo.NewInsertOneModel().SetDocument(metaList))
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelFunc()
+
+	for _, meta := range metaList.([]interface{}) {
+		writes = append(writes, mongo.NewInsertOneModel().SetDocument(meta))
+	}
 	_, err = collection.BulkWrite(ctx, writes)
 	return
 }
@@ -173,7 +209,9 @@ func Count(query *play.Query) (count int64, err error) {
 	}
 
 	filter := fetch(query)
-	ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelFunc()
+
 	count, err = collection.CountDocuments(ctx, filter)
 
 	return
@@ -292,9 +330,31 @@ func fetch(query *play.Query) bson.M {
 				fieldCon["$eq"] = cond.Val
 			}
 		case "NotEqual":
-			fieldCon["$ne"] = cond.Val
+			if cond.Field == "_id" && reflect.TypeOf(cond.Val).String() == "string" {
+				fieldCon["$ne"], _ = primitive.ObjectIDFromHex(cond.Val.(string))
+			} else {
+				fieldCon["$ne"] = cond.Val
+			}
 		case "NotIn":
-			fieldCon["$nin"] = cond.Val
+			if cond.Field == "_id" {
+				if reflect.TypeOf(cond.Val).String() == "[]interface {}" {
+					list := make([]primitive.ObjectID, 0, 1)
+					for _, v := range cond.Val.([]interface{}) {
+						switch v.(type) {
+						case primitive.ObjectID:
+							list = append(list, v.(primitive.ObjectID))
+						case string:
+							obj, _ := primitive.ObjectIDFromHex(v.(string))
+							list = append(list, obj)
+						}
+					}
+					fieldCon["$nin"] = list
+				} else {
+					fieldCon["$nin"] = cond.Val
+				}
+			} else {
+				fieldCon["$nin"] = cond.Val
+			}
 		case "Less":
 			fieldCon["$lt"] = cond.Val
 		case "Greater":

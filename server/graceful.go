@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"github.com/leochen2038/play"
 	"log"
 	"net"
 	"os"
@@ -94,6 +95,7 @@ func signalHandler() {
 		switch <-ch {
 		case syscall.SIGINT, syscall.SIGTERM:
 			signal.Stop(ch)
+			play.CronStop()
 			wg.Wait()
 			os.Exit(0)
 		case syscall.SIGUSR2:

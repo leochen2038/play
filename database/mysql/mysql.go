@@ -51,12 +51,47 @@ func GetList(dest interface{}, query *play.Query) (err error) {
 	where, values := condtext(query)
 
 	rows, err = conn.Query("SELECT "+fields+" FROM "+query.DBName+"."+query.Table+where, values...)
+
 	if err != nil {
 		return
 	}
 	defer rows.Close()
 
 	err = scanAll(rows, dest)
+	return
+}
+
+func QueryMap(router, sqlStr string, args ...interface{}) (result []map[string]interface{}, err error) {
+	var conn *sql.DB
+	var rows *sql.Rows
+	if conn, err = getConnect(router); err != nil {
+		return
+	}
+	rows, err = conn.Query(sqlStr, args...)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	//获取列名
+	columns, _ := rows.Columns()
+
+	//定义一个切片,长度是字段的个数,切片里面的元素类型是sql.RawBytes
+	values := make([]sql.RawBytes, len(columns))
+	//定义一个切片,元素类型是interface{} 接口
+	scanArgs := make([]interface{}, len(values))
+	for i := range values {
+		//把sql.RawBytes类型的地址存进去了
+		scanArgs[i] = &values[i]
+	}
+	//获取字段值
+	for rows.Next() {
+		res := make(map[string]interface{})
+		rows.Scan(scanArgs...)
+		for i, col := range values {
+			res[columns[i]] = string(col)
+		}
+		result = append(result, res)
+	}
 	return
 }
 
@@ -155,6 +190,8 @@ func condtext(query *play.Query) (string, []interface{}) {
 				fields = append(fields, v.Field+" BETWEEN ? AND ?")
 			case "In":
 				fields = append(fields, v.Field+" IN ("+placeholders(v.Val)+")")
+			case "NotIn":
+				fields = append(fields, v.Field+" NOT IN ("+placeholders(v.Val)+")")
 			case "Like":
 				fields = append(fields, v.Field+" LIKE ?")
 			}
@@ -211,6 +248,10 @@ func condtext(query *play.Query) (string, []interface{}) {
 	sql := ""
 	if len(fields) > 0 {
 		sql += " WHERE " + strings.Join(fields, " AND ")
+	}
+
+	if len(query.Group) > 0 {
+		sql += " GROUP BY " + strings.Join(query.Group, ", ")
 	}
 
 	if len(query.Order) > 0 {

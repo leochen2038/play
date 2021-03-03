@@ -20,7 +20,10 @@ func NewJsonParser(data []byte) *JsonParser {
 }
 
 func (j *JsonParser) Bind(obj interface{}) (err error) {
-	return j.bindGJson(reflect.TypeOf(obj).Elem(), reflect.ValueOf(obj).Elem(), &j.json)
+	if vInput := reflect.ValueOf(obj).Elem().FieldByName("Input"); vInput.CanSet() {
+		return j.bindGJson(vInput.Type(), vInput, &j.json)
+	}
+	return
 }
 
 func (j *JsonParser) GetVal(key string) (val interface{}, err error) {
@@ -188,6 +191,10 @@ func setValueWithGJson(tField *reflect.StructField, vField reflect.Value, value 
 		vField.Set(reflect.ValueOf(value.Value()))
 		return nil
 	}
+	if fieldType == "bool" {
+		vField.SetBool(value.Bool())
+		return nil
+	}
 	if fieldType != "time.Time" && fieldType != "string" && value.Type.String() != "Number" {
 		if _, err := strconv.ParseFloat(value.Str, 64); err != nil {
 			return errors.New("data type need number")
@@ -220,9 +227,15 @@ func setValueWithGJson(tField *reflect.StructField, vField reflect.Value, value 
 		if value.Type.String() != "Number" {
 			layout := tField.Tag.Get("layout")
 			if layout != "" {
-				local, _ := time.LoadLocation("Local")
-				time.ParseInLocation(layout, value.String(), local)
-				if v, err := time.Parse(layout, value.String()); err != nil {
+				location := "Local"
+				if zone := tField.Tag.Get("zone"); zone != "" {
+					location = zone
+				}
+				local, err := time.LoadLocation(location)
+				if err != nil {
+					return err
+				}
+				if v, err := time.ParseInLocation(layout, value.String(), local); err != nil {
 					return err
 				} else {
 					vField.Set(reflect.ValueOf(v))
