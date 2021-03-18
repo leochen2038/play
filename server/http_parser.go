@@ -20,7 +20,14 @@ type HttpParser struct {
 
 func NewHttpParser(request *http.Request) play.Parser {
 	contentType := request.Header.Get("Content-Type")
-
+	contentLength := request.Header.Get("Content-Length")
+	contentLengthInt, _ := strconv.Atoi(contentLength)
+	
+	if contentType == "" && contentLengthInt > 0 {
+		request.Header.Set("Content-Type","application/json")
+		contentType = request.Header.Get("Content-Type")
+	}
+	
 	if strings.Contains(contentType, "json") {
 		raw, _ := ioutil.ReadAll(request.Body)
 		request.Body.Close()
