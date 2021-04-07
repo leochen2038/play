@@ -7,6 +7,7 @@ import (
 	"github.com/leochen2038/play/config"
 	"github.com/leochen2038/play/middleware/cache"
 	"github.com/leochen2038/play/middleware/etcd"
+	"github.com/leochen2038/play/parsers"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -46,7 +47,7 @@ func EtcdWithArgs(configKey, runningKey, crontabKey string, endpoints []string) 
 	}
 
 	// step 1. 获取配置信息
-	var configParser play.Parser
+	var configParser parsers.Parser
 	if configParser, err = config.NewEtcdParser(etcdAgent, configKey); err != nil {
 		return
 	}

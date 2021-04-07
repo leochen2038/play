@@ -3,6 +3,7 @@ package play
 type Output interface {
 	Get(key string) interface{}
 	Set(key string, val interface{})
+	All() interface{}
 }
 
 type playKvOutput struct {
@@ -21,5 +22,9 @@ func (o *playKvOutput) Get(key string) interface{} {
 		val, _ := o.data[key]
 		return val
 	}
+	return o.data
+}
+
+func (o *playKvOutput) All() interface{} {
 	return o.data
 }

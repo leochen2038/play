@@ -2,82 +2,100 @@ package play
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/leochen2038/play/parsers"
 	"net"
-	"net/http"
-	"os"
 	"runtime"
 	"strconv"
-	"strings"
 	"time"
 )
 
 var (
-	ProtocolVersion byte   = 3
 	intranetIp      net.IP = nil
 )
 
-type Context struct {
+//type TcpPacker interface {
+//	Unpack([]byte) (*Protocol, []byte, error)
+//	Pack([]byte) []byte
+//}
+
+//type Request struct {
+//	InstanceType int
+//	Version  byte
+//	Format string
+//	Render string
+//	Caller string
+//	Tag    string
+//	TraceId  string
+//	SpanId   []byte
+//	Respond  bool
+//	ActionName   string
+//	Parser parsers.Parser
+//	Http *http.Request
+//}
+
+//type Request struct {
+//	Protocol Protocol
+//	Http *http.Request
+//}
+
+
+type ActionInfo struct {
+	Name string
+	Tag string
 	RequestTime time.Time
-	ActionName  string
-	Render      string
+	Timeout time.Duration
+	Respond bool
+}
+
+type TraceContext struct {
+	TraceId string
+	SpanId byte
+	StartTime time.Time
+	FinishTime time.Time
+	ParentSpanId []byte
+	OperationName string
+	ServerName string
+}
+
+type Context struct {
+	ActionInfo ActionInfo
 	Input       *Input
 	Output      Output
-
-	HttpRequest  *http.Request
-	HttpResponse http.ResponseWriter
-	Session      Session
-	TraceId      string
-	SpanId       byte
-	ParentSpanId []byte
-	TagId        int
-	Version      byte
-	doneFlag     string
+	Session	*Session
+	Trace	TraceContext
+	Err error
+	ctx		context.Context
 }
 
-func (ctx *Context) Done(doneFlag string) error {
-	ctx.doneFlag = doneFlag
-	return nil
+func NewContextWithRequest(i ServerInstance, action ActionInfo, inputParser parsers.Parser, trace TraceContext, c *Client) *Context {
+	return &Context{
+		ActionInfo: action,
+		Input: NewInput(inputParser),
+		Output: &playKvOutput{},
+		Trace: trace,
+		Session: NewSession(c, i.Packer()),
+		ctx:context.Background(),
+	}
 }
 
-func NewContextWithInput(input *Input) *Context {
-	ctx := &Context{Input: input, Output: &playKvOutput{}, RequestTime: time.Now(), Version: ProtocolVersion}
-	return ctx
+func (ctx Context)Context() context.Context {
+	return ctx.ctx
 }
 
-func NewContextWithHttp(input *Input, r *http.Request, writer http.ResponseWriter) *Context {
-	ctx := NewContextWithInput(input)
-	ctx.HttpRequest = r
-	ctx.HttpResponse = writer
-	ctx.TraceId = GetMicroUqid("")
-
-	return ctx
-}
-
-func NewContext(input *Input, tagId int, traceId string, parentSpanId []byte, version byte) *Context {
-	ctx := NewContextWithInput(input)
-	ctx.TagId = tagId
-	ctx.TraceId = traceId
-	ctx.ParentSpanId = parentSpanId
-	ctx.Version = version
-
-	return ctx
-}
-
-func ContextBackground() *Context {
-	ctx := &Context{TraceId: GetMicroUqid(""), Version: ProtocolVersion}
-	return ctx
-}
-
-func Generate28Id(prefix string) string {
+// 根据ip，按时间生成28位Id
+func Generate28Id(prefix string, suffix string, ipv4 net.IP) string {
 	var x uint16
 	var timeNow = time.Now()
 
-	ipv4 := GetIntranetIp().To4()
+	if ipv4 == nil {
+		ipv4 = GetIntranetIp().To4()
+	}
 	bytesBuffer := bytes.NewBuffer(ipv4[2:])
 	_ = binary.Read(bytesBuffer, binary.BigEndian, &x)
-	return prefix + timeNow.Format("20060102150405") + fmt.Sprintf("%05d%04d%05d", x%0xffff, GetGoroutineID()%10000, timeNow.UnixNano()/1e3%100000)
+	return prefix + timeNow.Format("20060102150405") + fmt.Sprintf("%05d%04d%05d", x%0xffff, GetGoroutineID()%10000, timeNow.UnixNano()/1e3%100000) + suffix
 }
 
 func GetIntranetIp() net.IP {
@@ -103,39 +121,6 @@ func GetIntranetIp() net.IP {
 	}
 DONE:
 	return intranetIp
-}
-
-func GetMicroUqid(localaddr string) (traceId string) {
-	var hexIp string
-	var ip string
-
-	if localaddr == "" {
-		ipv4 := GetIntranetIp()
-		for _, v := range ipv4 {
-			hexIp += fmt.Sprintf("%02x", v)
-		}
-	} else {
-		ip = localaddr[:strings.Index(localaddr, ":")]
-		for j, i := 0, 0; i < len(ip); i++ {
-			if ip[i] == '.' {
-				hex, _ := strconv.Atoi(ip[j:i])
-				hexIp += fmt.Sprintf("%02x", hex)
-				j = i + 1
-			}
-		}
-	}
-
-	//	runtime.Gosched()
-	tm := time.Now()
-	micro := tm.Format(".000000")
-
-	if len(hexIp) > 8 {
-		traceId = fmt.Sprintf("%s%06s%.8s%04x", tm.Format("20060102150405"), micro[1:], hexIp, os.Getpid()%0x10000)
-	} else {
-		traceId = fmt.Sprintf("%s%06s%08s%04x", tm.Format("20060102150405"), micro[1:], hexIp, os.Getpid()%0x10000)
-	}
-
-	return
 }
 
 func GetGoroutineID() uint64 {

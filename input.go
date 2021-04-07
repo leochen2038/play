@@ -1,15 +1,12 @@
 package play
 
-type Parser interface {
-	GetVal(key string) (val interface{}, err error)
-	Bind(obj interface{}) error
-}
+import "github.com/leochen2038/play/parsers"
 
 type Input struct {
-	parser interface{ Parser }
+	parser interface{ parsers.Parser }
 }
 
-func NewInput(parser interface{ Parser }) *Input {
+func NewInput(parser interface{ parsers.Parser }) *Input {
 	return &Input{parser: parser}
 }
 

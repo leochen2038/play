@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/middleware/etcd"
+	"github.com/leochen2038/play/parsers"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -40,7 +40,7 @@ func (e *EtcdParser) Bind(obj interface{}) error {
 	panic("EtcdParser no support Bind Method yet")
 }
 
-func NewEtcdParser(etcd *etcd.EtcdAgent, configKey string) (parser play.Parser, err error) {
+func NewEtcdParser(etcd *etcd.EtcdAgent, configKey string) (parser parsers.Parser, err error) {
 	var etcdParser EtcdParser
 	var dataByte []byte
 

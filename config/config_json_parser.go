@@ -3,7 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/parsers"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -39,7 +39,7 @@ func (parser *JsonParser) Bind(obj interface{}) error {
 	panic("EtcdParser no support Bind Method yet")
 }
 
-func NewJsonParser(file string, refashTickTime time.Duration) (parser play.Parser, err error) {
+func NewJsonParser(file string, refashTickTime time.Duration) (parser parsers.Parser, err error) {
 	var dataByte []byte
 	var jsonParser = JsonParser{}
 
