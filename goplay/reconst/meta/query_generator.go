@@ -98,7 +98,7 @@ func generateQueryCode(meta Meta) string {
 import (
 	"context"
 	"%s"
-	"%s/library/meta"
+	"%s/library/metas"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"%s/database/mongodb"
 	"time"
@@ -109,7 +109,7 @@ import (
 import (
 	"context"
 	"%s"
-	"%s/library/meta"
+	"%s/library/metas"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	mongodb "%s"
 	"time"
@@ -126,7 +126,7 @@ import (
 import (
 	"context"
 	"%s"
-	"%s/library/meta"
+	"%s/library/metas"
 	"%s/database/mysql"
 )
 `, env.FrameworkName, env.ModuleName, env.FrameworkName)
@@ -135,7 +135,7 @@ import (
 import (
 	"context"
 	"%s"
-	"%s/library/meta"
+	"%s/library/metas"
 	mysql "%s"
 )
 `, env.FrameworkName, env.ModuleName, meta.Strategy.Storage.Drive)
@@ -284,8 +284,8 @@ func (q *query%s)Limit(start int64, count int64) *query%s {
 
 	if meta.Strategy.Storage.Type == "mongodb" {
 		src += fmt.Sprintf(`
-func (q *query%s)UpdateAndGetOne() (*meta.%s, error) {
-	m := &meta.%s{}
+func (q *query%s)UpdateAndGetOne() (*metas.%s, error) {
+	m := &metas.%s{}
 	if err := %s.UpdateAndGetOne(m, &q.query); err != nil {
 		return nil, err 
 	}
@@ -296,16 +296,16 @@ func (q *query%s)UpdateAndGetOne() (*meta.%s, error) {
 
 	if meta.Strategy.Storage.Type == "mongodb" {
 		src += fmt.Sprintf(`
-func (q *query%s)GetOne() (*meta.%s, error) {
-	m := &meta.%s{}
+func (q *query%s)GetOne() (*metas.%s, error) {
+	m := &metas.%s{}
 	if err := %s.GetOne(m, &q.query); err != nil {
 		return nil, err 
 	}
 `, funcName, funcName, funcName, meta.Strategy.Storage.Drive)
 	for k, v := range arrayFieldList {
 		src += fmt.Sprintf(
-	`if meta.%s == nil {
-		meta.%s = make(%s, 0)
+	`if metas.%s == nil {
+		metas.%s = make(%s, 0)
 	}
 `, k, k, v )
 		}
@@ -326,8 +326,8 @@ func (q *query%s)GetOne() (*Meta%s, error) {
 	}
 
 	src += fmt.Sprintf(`
-func (q *query%s)GetList() ([]meta.%s, error) {
-	list := make([]meta.%s, 0)
+func (q *query%s)GetList() ([]metas.%s, error) {
+	list := make([]metas.%s, 0)
 	err := %s.GetList(&list, &q.query)
 `, funcName, funcName, funcName, meta.Strategy.Storage.Drive)
 	if len(arrayFieldList) > 0 {
@@ -357,7 +357,7 @@ func (q *query%s)GetList() ([]meta.%s, error) {
 		}
 
 		src += fmt.Sprintf(`
-func (q *query%s)Save(m *meta.%s) error {
+func (q *query%s)Save(m *metas.%s) error {
 	%s
 	if m.Id != primitive.NilObjectID {
 		return %s.Save(m, &m.Id, &q.query)
@@ -370,7 +370,7 @@ func (q *query%s)Save(m *meta.%s) error {
 `, funcName, funcName, msrc, meta.Strategy.Storage.Drive, csrc, meta.Strategy.Storage.Drive)
 	} else {
 		src += fmt.Sprintf(`
-func (q *query%s)Save(m *meta.%s) error {
+func (q *query%s)Save(m *metas.%s) error {
 	return %s.Save(m, &q.query)
 }
 `, funcName, funcName, meta.Strategy.Storage.Drive)
@@ -432,10 +432,10 @@ func writeMeta(meta Meta) (err error) {
 	exec.Command(runtime.GOROOT()+"/bin/gofmt", "-w", filePath).Run()
 
 
-	if err := os.MkdirAll(env.ProjectPath + "/library/meta", 0744); err != nil {
+	if err := os.MkdirAll(env.ProjectPath + "/library/metas", 0744); err != nil {
 		return err
 	}
-	filePath = fmt.Sprintf("%s/library/meta/%s_%s.go", env.ProjectPath, formatLowerName(meta.Module), formatLowerName(meta.Name))
+	filePath = fmt.Sprintf("%s/library/metas/%s_%s.go", env.ProjectPath, formatLowerName(meta.Module), formatLowerName(meta.Name))
 	src = generateMetaCode(meta)
 	if err = ioutil.WriteFile(filePath, []byte(src), 0644); err != nil {
 		return

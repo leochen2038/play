@@ -36,6 +36,7 @@ func (i *websocketInstance)ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var conn *websocket.Conn
 	var c = new(play.Client)
 	var s = play.NewSession(c, i.packerDelegate)
+	defer s.Close()
 
 	if conn, err = i.update(w, r); err != nil {
 		log.Fatal(err)

@@ -48,11 +48,12 @@ func NewHttpInstance(name string, addr string, packer play.Packer, render func(c
 }
 
 func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var request *play.Request
 	var c = new(play.Client)
 	var s = play.NewSession(c, i.packerDelegate)
-	var request *play.Request
-	c.Http.Request, c.Http.Response = r, w
+	defer s.Close()
 
+	c.Http.Request, c.Http.Response = r, w
 	if i.websocket != nil {
 		if conn, _ := i.websocket.update(w, r); conn != nil {
 			c.Websocket.WebsocketConn = conn

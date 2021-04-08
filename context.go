@@ -70,7 +70,7 @@ type Context struct {
 	ctx		context.Context
 }
 
-func NewContextWithRequest(i ServerInstance, action ActionInfo, inputParser parsers.Parser, trace TraceContext, s *Session) *Context {
+func NewContextWithRequest(action ActionInfo, inputParser parsers.Parser, trace TraceContext, s *Session) *Context {
 	return &Context{
 		ActionInfo: action,
 		Input: NewInput(inputParser),

@@ -109,7 +109,7 @@ func doRequest(i play.ServerInstance, s *play.Session, request *play.Request) {
 		}
 	}()
 
-	ctx := play.NewContextWithRequest(i, action, request.Parser, trace, s)
+	ctx := play.NewContextWithRequest(action, request.Parser, trace, s)
 
 	// call custom onRequest
 	if ctx.Err = i.OnRequest(ctx); ctx.Err != nil {

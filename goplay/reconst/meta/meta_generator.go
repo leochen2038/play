@@ -10,7 +10,7 @@ import (
 func generateMetaCode(meta Meta) string {
 	funcName := formatUcfirstName(meta.Module) + formatUcfirstName(meta.Name)
 
-	src := "package meta\n"
+	src := "package metas\n"
 	if meta.Strategy.Storage.Type == "mongodb" {
 		src += fmt.Sprintf(`
 import (

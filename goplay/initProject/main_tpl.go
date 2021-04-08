@@ -9,7 +9,11 @@ func getMainTpl() string {
 	code := fmt.Sprintf(`
 package main
 
-import "%s/server"
+import (
+	"fmt"
+	"%s/server"
+)
+
 `, env.FrameworkName)
 	return code + serverCode()
 }

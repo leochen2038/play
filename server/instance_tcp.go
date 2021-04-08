@@ -46,6 +46,7 @@ func (i *TcpInstance)accept(conn net.Conn) {
 	c.Tcp.Conn = conn
 
 	defer func() {
+		s.Close()
 		_ = conn.Close()
 		if panicInfo := recover(); panicInfo != nil {
 			log.Fatal(fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack())))

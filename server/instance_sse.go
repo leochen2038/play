@@ -55,10 +55,11 @@ func (i *sseInstance)WithCertificate(cert tls.Certificate) *sseInstance {
 
 func (i *sseInstance)ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
-	var client = new(play.Client)
-	var s = play.NewSession(client, i.packerDelegate)
-	client.Http.Request, client.Http.Response = r, w
+	var c = new(play.Client)
+	var s = play.NewSession(c, i.packerDelegate)
+	defer s.Close()
 
+	c.Http.Request, c.Http.Response = r, w
 	if err = i.update(w, r); err != nil {
 		log.Println(err)
 		return
