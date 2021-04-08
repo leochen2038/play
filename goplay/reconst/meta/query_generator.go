@@ -315,12 +315,12 @@ func (q *query%s)GetOne() (*metas.%s, error) {
 `
 	} else {
 		src += fmt.Sprintf(`
-func (q *query%s)GetOne() (*Meta%s, error) {
-	meta := &Meta%s{}
-	if err := %s.GetOne(meta, &q.query); err != nil {
+func (q *query%s)GetOne() (*metas.%s, error) {
+	m := &metas.%s{}
+	if err := %s.GetOne(m, &q.query); err != nil {
 		return nil, err 
 	}
-	return meta, nil
+	return m, nil
 }
 `, funcName, funcName, funcName, meta.Strategy.Storage.Drive)
 	}
