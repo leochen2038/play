@@ -425,7 +425,7 @@ func writeMeta(meta Meta) (err error) {
 		return err
 	}
 	filePath := fmt.Sprintf("%s/library/db/%s_%s.go", env.ProjectPath, formatLowerName(meta.Module), formatLowerName(meta.Name))
-	src := generateCode(meta)
+	src := generateQueryCode(meta)
 	if err = ioutil.WriteFile(filePath, []byte(src), 0644); err != nil {
 		return
 	}
