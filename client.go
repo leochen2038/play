@@ -7,6 +7,7 @@ import (
 )
 
 type Client struct {
+	IsClose bool
 	Http struct {
 		Template string
 		Render string
@@ -18,7 +19,9 @@ type Client struct {
 		WebsocketConn *websocket.Conn
 	}
 	Tcp struct {
-		version int
+		Tag string
+		TraceId string
+		Version byte
 		Conn net.Conn
 	}
 }

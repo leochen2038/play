@@ -4,35 +4,42 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/packers"
 	"log"
 	"net"
 	"net/http"
 	"sync"
-	"time"
 )
 
 type sseInstance struct {
 	addr string
 	name string
-	defaultRender string
-	requestTimeout time.Duration
 	wg           sync.WaitGroup
 
 	tlsConfig 		 *tls.Config
 	httpServer       http.Server
+
 	packerDelegate   play.Packer
-	inputMaxSize     int64
-	onAcceptHandler  func(client *play.Client) (*play.Request, error)
 	onRequestHandler func(ctx *play.Context) error
-	onResponseHandler  func(ctx *play.Context) error
+	renderHandler  func(ctx *play.Context)
 }
 
-func NewSSEInstance(name string, addr string) *sseInstance {
-	i := &sseInstance{name: name, addr:addr, defaultRender: "json"}
-	i.packerDelegate = new(packers.SSEPacker)
+func NewSSEInstance(name string, addr string, packer play.Packer, render func(ctx *play.Context)) *sseInstance {
+	i := &sseInstance{name: name, addr:addr}
+	if packer != nil {
+		i.packerDelegate = packer
+	} else {
+		i.packerDelegate = new(packers.SSEPacker)
+	}
+	if render != nil {
+		i.renderHandler = render
+	} else {
+		i.renderHandler = func(ctx *play.Context) {
+			_ = ctx.Session.Write(ctx.Output)
+		}
+	}
+
 	return i
 }
 
@@ -49,13 +56,14 @@ func (i *sseInstance)WithCertificate(cert tls.Certificate) *sseInstance {
 func (i *sseInstance)ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var client = new(play.Client)
+	var s = play.NewSession(client, i.packerDelegate)
 	client.Http.Request, client.Http.Response = r, w
 
 	if err = i.update(w, r); err != nil {
 		log.Println(err)
 		return
 	}
-	i.accept(client)
+	i.accept(s)
 }
 
 func (i *sseInstance)update(w http.ResponseWriter, r *http.Request) error {
@@ -66,8 +74,8 @@ func (i *sseInstance)update(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (i *sseInstance)accept(c *play.Client) {
-	var w = c.Http.Response
+func (i *sseInstance)accept(s *play.Session) {
+	var w = s.Client.Http.Response
 	_, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
@@ -79,23 +87,14 @@ func (i *sseInstance)accept(c *play.Client) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Transfer-Encoding", "chunked")
 
-	request, _, err := i.packerDelegate.Read(c, nil)
+	request, _, err := i.packerDelegate.Read(s.Client, nil)
 	if err != nil {
 		return
 	}
 
-	doRequest(i, c, request)
-	<-c.Http.Request.Context().Done()
-	fmt.Println("close sse")
-}
-
-
-func (i *sseInstance)InputMaxSize() int64 {
-	return i.inputMaxSize
-}
-
-func (i *sseInstance)DefaultRender() string {
-	return i.defaultRender
+	doRequest(i, s, request)
+	<-s.Client.Http.Request.Context().Done()
+	s.Close()
 }
 
 func (i *sseInstance)SetPackerDelegate(delegate play.Packer) {
@@ -103,12 +102,13 @@ func (i *sseInstance)SetPackerDelegate(delegate play.Packer) {
 		i.packerDelegate = delegate
 	}
 }
-func (i *sseInstance)SetOnAcceptHandler(handler func(client *play.Client) (*play.Request, error)) {
-	i.onAcceptHandler = handler
+
+func (i *sseInstance) SetOnRequestHandler(handler func(ctx *play.Context) error) {
+	i.onRequestHandler = handler
 }
 
-func (i *sseInstance)RequestTimeout() time.Duration {
-	return i.requestTimeout
+func (i *sseInstance)SetRenderHandler(handler func (ctx *play.Context)) {
+	i.renderHandler = handler
 }
 
 func (i *sseInstance)Address() string {
@@ -127,11 +127,10 @@ func (i *sseInstance)OnRequest(ctx *play.Context) error {
 	}
 	return nil
 }
-func (i *sseInstance)OnResponse(ctx *play.Context) error {
-	if i.onResponseHandler != nil {
-		return i.onResponseHandler(ctx)
+func (i *sseInstance)Render(ctx *play.Context) {
+	if i.renderHandler != nil {
+		i.renderHandler(ctx)
 	}
-	return nil
 }
 func (i *sseInstance)Run(listener net.Listener) error {
 	i.httpServer.Handler = i

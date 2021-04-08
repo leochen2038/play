@@ -36,7 +36,7 @@ func (g *group)broadcast() {
 				g.members.Range(func(key, value interface{}) bool {
 					s := value.(*play.Session)
 					if message.excluded != nil && message.excluded.SessId != s.SessId {
-						_, err := s.Write(message.message)
+						err := s.Write(message.message)
 						if err != nil {
 							g.members.Delete(key)
 						}
@@ -46,6 +46,9 @@ func (g *group)broadcast() {
 					}
 					return true
 				})
+				if message.feedback != nil {
+					close(message.feedback)
+				}
 			}
 		}
 	}()

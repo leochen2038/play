@@ -20,10 +20,9 @@ type httpInstance struct {
 	tlsConfig 		 *tls.Config
 	packerDelegate   play.Packer
 	onRequestHandler func(ctx *play.Context) error
-	onRenderHandler  func(ctx *play.Context) error
+	renderHandler  func(ctx *play.Context)
 	wg               sync.WaitGroup
 	httpServer       http.Server
-	inputMaxSize     int64
 	requestTimeout   time.Duration
 }
 
@@ -31,50 +30,33 @@ func (i *httpInstance)SetWebsocket(websocket *websocketInstance) {
 	i.websocket = websocket
 }
 
-func (i *httpInstance)SetPackerDelegate(delegate play.Packer) {
-	if delegate != nil {
-		i.packerDelegate = delegate
+func NewHttpInstance(name string, addr string, packer play.Packer, render func(ctx *play.Context) ) *httpInstance {
+	i := &httpInstance{name:name, addr:addr}
+	if packer != nil {
+		i.packerDelegate = packer
+	} else {
+		i.packerDelegate = &packers.HttpPacker{InputMaxSize:1024*4, DefaultRender:"json"}
 	}
-}
-
-func (i *httpInstance)RequestTimeout() time.Duration {
-	return i.requestTimeout
-}
-
-
-func (i *httpInstance)SetOnRequestHandle(onRequest func(ctx *play.Context) error) {
-	i.onRequestHandler = onRequest
-}
-func (i *httpInstance)SetRequestTimeOut(requestTimeout time.Duration) {
-	i.requestTimeout = requestTimeout
-}
-func (i *httpInstance)SetFormDataSize(size int64) {
-	i.inputMaxSize = size
-}
-
-func (i *httpInstance)OnRequest(ctx *play.Context) error {
-	if i.onRequestHandler != nil {
-		return i.onRequestHandler(ctx)
+	if render != nil {
+		i.renderHandler = render
+	} else {
+		i.renderHandler = func(ctx *play.Context) {
+			_ = ctx.Session.Write(ctx.Output)
+		}
 	}
-	return nil
-}
-
-func (i *httpInstance)OnResponse(ctx *play.Context) error {
-	if i.onRenderHandler != nil {
-		return i.onRenderHandler(ctx)
-	}
-	return nil
+	return i
 }
 
 func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var c = new(play.Client)
+	var s = play.NewSession(c, i.packerDelegate)
 	var request *play.Request
 	c.Http.Request, c.Http.Response = r, w
 
 	if i.websocket != nil {
 		if conn, _ := i.websocket.update(w, r); conn != nil {
 			c.Websocket.WebsocketConn = conn
-			i.websocket.accept(c)
+			i.websocket.accept(s)
 			return
 		}
 	}
@@ -85,14 +67,11 @@ func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.Http.Template = request.ActionName
 
 	i.wg.Add(1)
-	doRequest(i, c, request)
+	doRequest(i, s, request)
 	i.wg.Done()
 }
 
-func NewHttpInstance(name string, addr string) *httpInstance {
-	i := &httpInstance{name:name, addr:addr, packerDelegate: &packers.HttpPacker{InputMaxSize: 1024*512, DefaultRender: "json"}}
-	return i
-}
+
 
 func (i *httpInstance)WithCertificate(cert tls.Certificate) *httpInstance {
 	if i.tlsConfig == nil {
@@ -102,6 +81,34 @@ func (i *httpInstance)WithCertificate(cert tls.Certificate) *httpInstance {
 	i.tlsConfig.Rand = rand.Reader
 	return i
 }
+
+func (i *httpInstance)SetPackerDelegate(delegate play.Packer) {
+	if delegate != nil {
+		i.packerDelegate = delegate
+	}
+}
+
+func (i *httpInstance)SetOnRequestHandler(handler func(ctx *play.Context) error) {
+	i.onRequestHandler = handler
+}
+
+func (i *httpInstance)OnRequest(ctx *play.Context) error {
+	if i.onRequestHandler != nil {
+		return i.onRequestHandler(ctx)
+	}
+	return nil
+}
+
+func (i *httpInstance)Render(ctx *play.Context) {
+	if i.renderHandler != nil {
+		i.renderHandler(ctx)
+	}
+}
+
+func (i *httpInstance)SetRenderHandler(handler func (ctx *play.Context)) {
+	i.renderHandler = handler
+}
+
 
 func (i *httpInstance)Address() string {
 	return i.addr

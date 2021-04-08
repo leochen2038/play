@@ -16,10 +16,11 @@ func (m *WebsocketJsonPacker)Read(c *play.Client, data []byte) (*play.Request, [
 	request.Respond = true
 	request.ActionName, request.Render = ParseHttpPath(c.Http.Request.URL.Path)
 	request.Parser = parsers.NewJsonParser(data)
+
 	return &request, nil, nil
 }
 
-func (m *WebsocketJsonPacker)Write(c *play.Client, output play.Output) (int, error) {
+func (m *WebsocketJsonPacker)Write(c *play.Client, output play.Output) error {
 	var err error
 	var data []byte
 	var messageType = c.Websocket.MessageType
@@ -28,13 +29,13 @@ func (m *WebsocketJsonPacker)Write(c *play.Client, output play.Output) (int, err
 	}
 
 	if data, err = json.Marshal(output.All()); err != nil {
-		return 0, err
+		return err
 	}
 
 	if err := c.Websocket.WebsocketConn.WriteMessage(messageType, data); err != nil {
-		return 0, err
+		return err
 	}
 
-	return len(data), nil
+	return  nil
 }
 

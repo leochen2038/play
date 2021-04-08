@@ -3,8 +3,10 @@ package packers
 import (
 	"errors"
 	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/middleware/golang/json"
 	"github.com/leochen2038/play/parsers"
 	"strconv"
+	"unsafe"
 )
 
 // request  protocol v3
@@ -75,8 +77,8 @@ func (p *TcpPlayPacker)Read(c *play.Client, buffer []byte) (*play.Request, []byt
 
 	request := play.Request{Version: buffer[8]}
 	switch request.Version {
-	case 2: err = withProtocolV2(buffer, dataSize, &request)
-	case 3: err = withProtocolV3(buffer, dataSize, &request)
+	case 2: err = readProtocolV2(buffer, dataSize, &request)
+	case 3: err = readProtocolV3(buffer, dataSize, &request)
 	default:
 		err = errors.New("socket protocol version error")
 	}
@@ -86,12 +88,63 @@ func (p *TcpPlayPacker)Read(c *play.Client, buffer []byte) (*play.Request, []byt
 	return &request, buffer[dataSize:], nil
 }
 
-func (p *TcpPlayPacker) Write(c *play.Client, output play.Output) (int, error) {
-	return 0, nil
+func (p *TcpPlayPacker) Write(c *play.Client, output play.Output) (err error) {
+	var message []byte
+	var buffer []byte
+
+	if message, err = json.Marshal(output.All()); err != nil {
+		return err
+	}
+
+	switch c.Tcp.Version {
+	case 2: buffer = packProtocolV2(message, c.Tcp.TraceId)
+	case 3:
+		irc, rc := output.Get("rc"), 0
+		if output.Get("rc") != nil {
+			rc = irc.(int)
+		}
+		tagId, _ := strconv.Atoi(c.Tcp.Tag)
+		buffer = packProtocolV3(message, c.Tcp.TraceId, rc, tagId)
+	}
+
+	n, err := c.Tcp.Conn.Write(buffer)
+	if err != nil || n != len(buffer) {
+		_ = c.Tcp.Conn.Close()
+	}
+
+	return
+}
+
+func packProtocolV2(message []byte, traceId string) (buffer []byte) {
+	protocolSize := 45 + len(message)
+	messageSize := int2Bytes(protocolSize - 8)
+
+	buffer = append(buffer, []byte("==>>")...)
+	buffer = append(buffer, messageSize...)
+	buffer = append(buffer, byte(2))
+	buffer = append(buffer, int2Bytes(len(message))...)
+	buffer = append(buffer, []byte(traceId)...)
+	buffer = append(buffer, message...)
+
+	return
+}
+
+func packProtocolV3(message []byte, traceId string, rc int, tagId int)(buffer []byte) {
+	protocolSize := 49 + len(message)
+
+	buffer = append(buffer, []byte("<<==")...)
+	buffer = append(buffer, int2Bytes(protocolSize-8)...)
+	buffer = append(buffer, byte(3))
+	buffer = append(buffer, int2Bytes(tagId)...)
+	buffer = append(buffer, []byte(traceId)...)
+
+	buffer = append(buffer, int2Bytes(rc)...)
+	buffer = append(buffer, message...)
+	return
 }
 
 
-func withProtocolV2(buffer []byte, dataSize int, protocol *play.Request) error {
+func readProtocolV2(buffer []byte, dataSize int, protocol *play.Request) error {
 	actionEndIdx := 49 + bytes2Int(buffer[12:13])
 	messageEndIdx := actionEndIdx + bytes2Int(buffer[13:17])
 	if buffer[9] > 0 {
@@ -108,7 +161,7 @@ func withProtocolV2(buffer []byte, dataSize int, protocol *play.Request) error {
 	return nil
 }
 
-func withProtocolV3(buffer []byte, dataSize int, protocol *play.Request) error {
+func readProtocolV3(buffer []byte, dataSize int, protocol *play.Request) error {
 	if dataSize < 67 {
 		return errors.New("socket protocol format error")
 	}
@@ -144,6 +197,19 @@ func bytes2Int(data []byte) int {
 	var i uint = 0
 	for i = 0; i < uint(l); i++ {
 		ret = ret | (int(data[i]) << (i * 8))
+	}
+	return ret
+}
+
+func int2Bytes(data int) (ret []byte) {
+	var d32 = int32(data)
+	var sizeof = unsafe.Sizeof(d32)
+
+	ret = make([]byte, sizeof)
+	var tmp int32 = 0xff
+	var index uint = 0
+	for index = 0; index < uint(sizeof); index++ {
+		ret[index] = byte((tmp << (index * 8) & d32) >> (index * 8))
 	}
 	return ret
 }

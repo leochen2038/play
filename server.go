@@ -2,19 +2,20 @@ package play
 
 import (
 	"net"
-	"time"
 )
 
 type ServerInstance interface {
 	Address() string
 	Name() string
 	Type() int
-	RequestTimeout() time.Duration
+
+	SetOnRequestHandler(handler func(ctx *Context) error)
 	SetPackerDelegate(delegate Packer)
-	Packer() Packer
+	SetRenderHandler(handler func (ctx *Context))
 
 	OnRequest(ctx *Context) error
-	OnResponse(ctx *Context) error
+	Render(ctx *Context)
+	Packer() Packer
 	Run(net.Listener) error
 	Close()
 }

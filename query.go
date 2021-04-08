@@ -1,6 +1,9 @@
 package play
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 var ErrQueryEmptyResult = errors.New("empty result in query")
 
@@ -21,4 +24,5 @@ type Query struct {
 	Limit         [2]int64
 	Group         []string
 	Router        string
+	Context 	  context.Context
 }

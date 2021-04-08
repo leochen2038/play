@@ -8,29 +8,28 @@ import (
 )
 
 type SSEPacker struct  {
-	InputMaxSize int64
 }
 
 func (p *SSEPacker)Read(c *play.Client, data []byte) (*play.Request, []byte, error) {
 	var request play.Request
 	request.Respond = true
 	request.ActionName, request.Render = ParseHttpPath(c.Http.Request.URL.Path)
-	request.Parser = ParseHttpInput(c.Http.Request, p.InputMaxSize)
+	request.Parser = ParseHttpInput(c.Http.Request, 1024*4)
 	return &request, nil, nil
 }
 
-func (p *SSEPacker)Write(c *play.Client, output play.Output) (int, error) {
+func (p *SSEPacker)Write(c *play.Client, output play.Output) error {
 	var err error
 	var data []byte
 	var w = c.Http.Response
 
 	if data, err = json.Marshal(output.All()); err != nil {
-		return 0, err
+		return err
 	}
 
 	if _, err = fmt.Fprintf(w, "data: %s\n\n", string(data)); err != nil {
-		return 0, err
+		return  err
 	}
 	w.(http.Flusher).Flush()
-	return len(data), err
+	return  err
 }

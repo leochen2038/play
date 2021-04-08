@@ -19,9 +19,13 @@ func NewSession(c *Client, packer Packer) *Session {
 	}
 }
 
-func (s *Session) Write(output Output) (int, error) {
+func (s *Session) Write(output Output)  error {
 	if output != nil {
 		return s.packer.Write(s.Client, output)
 	}
-	return 0, nil
+	return nil
+}
+
+func (s *Session)Close() {
+	s.Client.IsClose = true
 }

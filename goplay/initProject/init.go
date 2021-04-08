@@ -39,6 +39,9 @@ func InitProject(upgrade bool) (err error) {
 	if err = createTemplate(); err != nil {
 		return
 	}
+	if err = createRender(); err != nil {
+		return
+	}
 	return
 }
 
@@ -86,6 +89,10 @@ func createAssets() (err error) {
 
 func createLibrary() (err error) {
 	return os.Mkdir(env.ProjectPath+"/library", 0744)
+}
+
+func createRender() (err error) {
+	return os.Mkdir(env.ProjectPath+"/render", 0744)
 }
 
 func createUtils() (err error) {

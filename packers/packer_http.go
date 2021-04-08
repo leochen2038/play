@@ -24,7 +24,7 @@ func (p *HttpPacker)Read(c *play.Client, data []byte) (*play.Request, []byte, er
 	return &request, nil, nil
 }
 
-func (p *HttpPacker)Write(c *play.Client, output play.Output) (int, error) {
+func (p *HttpPacker)Write(c *play.Client, output play.Output)  error {
 	var err error
 	var data []byte
 	var render = c.Http.Render
@@ -33,9 +33,10 @@ func (p *HttpPacker)Write(c *play.Client, output play.Output) (int, error) {
 	}
 
 	if data, err = json.Marshal(output.All()); err != nil {
-		return 0, err
+		return err
 	}
-	return c.Http.Response.Write(data)
+	_, err = c.Http.Response.Write(data)
+	return err
 }
 
 func ParseHttpPath(path string) (action string, render string) {

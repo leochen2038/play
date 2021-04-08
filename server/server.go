@@ -23,7 +23,8 @@ type runningInstance struct {
 }
 
 var (
-	instanceWaitGroup	sync.WaitGroup
+	defaultActionTimeout = 500*time.Millisecond
+	instanceWaitGroup sync.WaitGroup
 	instances  sync.Map
 	ppidkilled bool
 )
@@ -77,7 +78,6 @@ func Boot(i play.ServerInstance) error {
 	go func() {
 		defer instanceWaitGroup.Done()
 		_ = i.Run(listener)
-		fmt.Println("xxxxxx")
 	}()
 
 	return nil
@@ -99,9 +99,8 @@ func Shutdown(name string) {
 	}
 }
 
-func doRequest(i play.ServerInstance, c *play.Client, request *play.Request) {
-	var err error
-	var action = play.ActionInfo{Name: request.ActionName, Respond: request.Respond, RequestTime: time.Now(), Timeout: i.RequestTimeout(), Tag: request.Tag}
+func doRequest(i play.ServerInstance, s *play.Session, request *play.Request) {
+	var action = play.ActionInfo{Name: request.ActionName, Respond: request.Respond, RequestTime: time.Now(), Timeout: defaultActionTimeout, Tag: request.Tag}
 	var trace = play.TraceContext{TraceId: request.TraceId, ParentSpanId: request.SpanId, StartTime: time.Now(), ServerName: request.ActionName}
 
 	defer func() {
@@ -110,7 +109,7 @@ func doRequest(i play.ServerInstance, c *play.Client, request *play.Request) {
 		}
 	}()
 
-	ctx := play.NewContextWithRequest(i, action, request.Parser, trace, c)
+	ctx := play.NewContextWithRequest(i, action, request.Parser, trace, s)
 
 	// call custom onRequest
 	if ctx.Err = i.OnRequest(ctx); ctx.Err != nil {
@@ -119,15 +118,9 @@ func doRequest(i play.ServerInstance, c *play.Client, request *play.Request) {
 	ctx.Err = play.RunAction(ctx)
 
 RENDER:
-	if i.OnResponse != nil {
-		_ = i.OnResponse(ctx)
+	if i.Render != nil {
+		i.Render(ctx)
 	}
-	if action.Respond {
-		_, _ = ctx.Session.Write(ctx.Output)
-	}
-
-	// end of request
-	fmt.Println(err)
 }
 
 func reload() (int, error) {
