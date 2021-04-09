@@ -45,9 +45,10 @@ func ParseHttpPath(path string) (action string, render string) {
 		render = path[indexDot+1:]
 	}
 	if path == "/" || path == "" {
-		path = "/index"
+		action = "/index"
 	}
-	action = strings.ReplaceAll(path[1:], "/", ".")
+
+	action = strings.ReplaceAll(action[1:], "/", ".")
 	return
 }
 
