@@ -9,6 +9,7 @@ import (
 	"net"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -61,6 +62,7 @@ type TraceContext struct {
 }
 
 type Context struct {
+	values sync.Map
 	ActionInfo ActionInfo
 	Input       *Input
 	Output      Output
@@ -74,14 +76,21 @@ func NewContextWithRequest(action ActionInfo, inputParser parsers.Parser, trace 
 	return &Context{
 		ActionInfo: action,
 		Input: NewInput(inputParser),
-		Output: &playKvOutput{},
+		Output: &KvOutput{},
 		Trace: trace,
 		Session: s,
 		ctx:context.Background(),
 	}
 }
+func (ctx *Context)Value(key string) (interface{}, bool) {
+	return ctx.values.Load(key)
+}
 
-func (ctx Context)Context() context.Context {
+func (ctx *Context)SetValue(key string, val interface{}) {
+	ctx.values.Store(key, val)
+}
+
+func (ctx *Context)Context() context.Context {
 	return ctx.ctx
 }
 

@@ -15,7 +15,7 @@ type HttpPacker struct  {
 	DefaultRender string
 }
 
-func (p *HttpPacker)Read(c *play.Client, data []byte) (*play.Request, []byte, error) {
+func (p *HttpPacker)Read(c *play.Conn, data []byte) (*play.Request, []byte, error) {
 	var request play.Request
 
 	request.Respond = true
@@ -24,7 +24,7 @@ func (p *HttpPacker)Read(c *play.Client, data []byte) (*play.Request, []byte, er
 	return &request, nil, nil
 }
 
-func (p *HttpPacker)Write(c *play.Client, output play.Output)  error {
+func (p *HttpPacker)Write(c *play.Conn, output play.Output)  error {
 	var err error
 	var data []byte
 	var render = c.Http.Render

@@ -15,23 +15,23 @@ type TcpInstance struct {
 	addr             string
 	name             string
 	packerDelegate   play.Packer
-	onAcceptHandler  func(client *play.Client) (*play.Request, error)
+	onAcceptHandler  func(client *play.Conn) (*play.Request, error)
 	onRequestHandler func(ctx *play.Context) error
-	renderHandler  func(ctx *play.Context)
+	responseHandler  func(ctx *play.Context)
 	wg               sync.WaitGroup
 }
 
-func NewSocketInstance(name string, addr string, packer play.Packer, render func(ctx *play.Context)) *TcpInstance {
+func NewSocketInstance(name string, addr string, packer play.Packer, response func(ctx *play.Context)) *TcpInstance {
 	i := &TcpInstance{name: name, addr:addr}
 	if packer != nil {
 		i.packerDelegate = packer
 	} else {
 		i.packerDelegate = new(packers.TcpPlayPacker)
 	}
-	if render != nil {
-		i.renderHandler = render
+	if response != nil {
+		i.responseHandler = response
 	} else {
-		i.renderHandler = func(ctx *play.Context) {
+		i.responseHandler = func(ctx *play.Context) {
 			_ = ctx.Session.Write(ctx.Output)
 		}
 	}
@@ -41,7 +41,7 @@ func NewSocketInstance(name string, addr string, packer play.Packer, render func
 func (i *TcpInstance)accept(conn net.Conn) {
 	var err error
 	var request *play.Request
-	var c = new(play.Client)
+	var c = new(play.Conn)
 	var s = play.NewSession(c, i.packerDelegate)
 	c.Tcp.Conn = conn
 
@@ -72,7 +72,7 @@ func (i *TcpInstance)onReady(s *play.Session) {
 	var buffer = make([]byte, 4096)
 	var n int
 	var request *play.Request
-	var conn = s.Client.Tcp.Conn
+	var conn = s.Conn.Tcp.Conn
 
 
 	for {
@@ -82,16 +82,16 @@ func (i *TcpInstance)onReady(s *play.Session) {
 		}
 		surplus = append(surplus, buffer[:n]...)
 		if true {
-			if request, surplus, err = i.packerDelegate.Read(s.Client, surplus); err != nil {
+			if request, surplus, err = i.packerDelegate.Read(s.Conn, surplus); err != nil {
 				log.Println("[play server]", err, "on", conn.RemoteAddr().String())
 				return
 			}
 			if request == nil {
 				continue
 			} else {
-				s.Client.Tcp.Tag = request.Tag
-				s.Client.Tcp.TraceId = request.TraceId
-				s.Client.Tcp.Version = request.Version
+				s.Conn.Tcp.Tag = request.Tag
+				s.Conn.Tcp.TraceId = request.TraceId
+				s.Conn.Tcp.Version = request.Version
 				i.wg.Add(1)
 				doRequest(i, s, request)
 				i.wg.Done()
@@ -104,10 +104,10 @@ func (i *TcpInstance)onReady(s *play.Session) {
 func (i *TcpInstance)SetOnRequestHandler(handler func(ctx *play.Context) error) {
 	i.onRequestHandler = handler
 }
-func (i *TcpInstance)SetRenderHandler(handler func(ctx *play.Context)) {
-	i.renderHandler = handler
+func (i *TcpInstance)SetResponseHandler(handler func(ctx *play.Context)) {
+	i.responseHandler = handler
 }
-func (i *TcpInstance)SetOnAcceptHandler(handler func(c *play.Client) (*play.Request, error)) {
+func (i *TcpInstance)SetOnAcceptHandler(handler func(c *play.Conn) (*play.Request, error)) {
 	i.onAcceptHandler = handler
 }
 func (i *TcpInstance)OnRequest(ctx *play.Context) error {
@@ -117,9 +117,9 @@ func (i *TcpInstance)OnRequest(ctx *play.Context) error {
 	return nil
 }
 
-func (i *TcpInstance)Render(ctx *play.Context) {
-	if i.renderHandler != nil {
-		i.renderHandler(ctx)
+func (i *TcpInstance)Response(ctx *play.Context) {
+	if i.responseHandler != nil {
+		i.responseHandler(ctx)
 	}
 }
 

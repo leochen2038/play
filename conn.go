@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-type Client struct {
+type Conn struct {
 	IsClose bool
 	Http struct {
 		Template string

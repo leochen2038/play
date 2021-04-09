@@ -11,10 +11,10 @@ type ServerInstance interface {
 
 	SetOnRequestHandler(handler func(ctx *Context) error)
 	SetPackerDelegate(delegate Packer)
-	SetRenderHandler(handler func (ctx *Context))
+	SetResponseHandler(handler func (ctx *Context))
 
 	OnRequest(ctx *Context) error
-	Render(ctx *Context)
+	Response(ctx *Context)
 	Packer() Packer
 	Run(net.Listener) error
 	Close()

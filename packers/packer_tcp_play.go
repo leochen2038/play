@@ -61,7 +61,7 @@ type TcpPlayPacker struct {
 }
 
 
-func (p *TcpPlayPacker)Read(c *play.Client, buffer []byte) (*play.Request, []byte, error) {
+func (p *TcpPlayPacker)Read(c *play.Conn, buffer []byte) (*play.Request, []byte, error) {
 	var err error
 	if len(buffer) < 8 {
 		return nil, buffer, nil
@@ -88,7 +88,7 @@ func (p *TcpPlayPacker)Read(c *play.Client, buffer []byte) (*play.Request, []byt
 	return &request, buffer[dataSize:], nil
 }
 
-func (p *TcpPlayPacker) Write(c *play.Client, output play.Output) (err error) {
+func (p *TcpPlayPacker) Write(c *play.Conn, output play.Output) (err error) {
 	var message []byte
 	var buffer []byte
 
@@ -97,14 +97,14 @@ func (p *TcpPlayPacker) Write(c *play.Client, output play.Output) (err error) {
 	}
 
 	switch c.Tcp.Version {
-	case 2: buffer = packProtocolV2(message, c.Tcp.TraceId)
+	case 2: buffer = packResponseProtocolV2(message, c.Tcp.TraceId)
 	case 3:
 		irc, rc := output.Get("rc"), 0
 		if output.Get("rc") != nil {
 			rc = irc.(int)
 		}
 		tagId, _ := strconv.Atoi(c.Tcp.Tag)
-		buffer = packProtocolV3(message, c.Tcp.TraceId, rc, tagId)
+		buffer = packResponseProtocolV3(message, c.Tcp.TraceId, rc, tagId)
 	}
 
 	n, err := c.Tcp.Conn.Write(buffer)
@@ -115,7 +115,7 @@ func (p *TcpPlayPacker) Write(c *play.Client, output play.Output) (err error) {
 	return
 }
 
-func packProtocolV2(message []byte, traceId string) (buffer []byte) {
+func packResponseProtocolV2(message []byte, traceId string) (buffer []byte) {
 	protocolSize := 45 + len(message)
 	messageSize := int2Bytes(protocolSize - 8)
 
@@ -129,7 +129,7 @@ func packProtocolV2(message []byte, traceId string) (buffer []byte) {
 	return
 }
 
-func packProtocolV3(message []byte, traceId string, rc int, tagId int)(buffer []byte) {
+func packResponseProtocolV3(message []byte, traceId string, rc int, tagId int)(buffer []byte) {
 	protocolSize := 49 + len(message)
 
 	buffer = append(buffer, []byte("<<==")...)

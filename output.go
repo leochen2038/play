@@ -6,18 +6,11 @@ type Output interface {
 	All() interface{}
 }
 
-type playKvOutput struct {
+type KvOutput struct {
 	data map[string]interface{}
 }
 
-func (o *playKvOutput) Set(key string, val interface{}) {
-	if o.data == nil {
-		o.data = make(map[string]interface{}, 10)
-	}
-	o.data[key] = val
-}
-
-func (o *playKvOutput) Get(key string) interface{} {
+func (o *KvOutput) Get(key string) interface{} {
 	if key != "" {
 		val, _ := o.data[key]
 		return val
@@ -25,6 +18,13 @@ func (o *playKvOutput) Get(key string) interface{} {
 	return o.data
 }
 
-func (o *playKvOutput) All() interface{} {
+func (o *KvOutput) All() interface{} {
 	return o.data
+}
+
+func (o *KvOutput) Set(key string, val interface{}) {
+	if o.data == nil {
+		o.data = make(map[string]interface{}, 10)
+	}
+	o.data[key] = val
 }

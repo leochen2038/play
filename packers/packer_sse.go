@@ -10,7 +10,7 @@ import (
 type SSEPacker struct  {
 }
 
-func (p *SSEPacker)Read(c *play.Client, data []byte) (*play.Request, []byte, error) {
+func (p *SSEPacker)Read(c *play.Conn, data []byte) (*play.Request, []byte, error) {
 	var request play.Request
 	request.Respond = true
 	request.ActionName, request.Render = ParseHttpPath(c.Http.Request.URL.Path)
@@ -18,7 +18,7 @@ func (p *SSEPacker)Read(c *play.Client, data []byte) (*play.Request, []byte, err
 	return &request, nil, nil
 }
 
-func (p *SSEPacker)Write(c *play.Client, output play.Output) error {
+func (p *SSEPacker)Write(c *play.Conn, output play.Output) error {
 	var err error
 	var data []byte
 	var w = c.Http.Response

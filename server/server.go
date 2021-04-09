@@ -113,13 +113,13 @@ func doRequest(i play.ServerInstance, s *play.Session, request *play.Request) {
 
 	// call custom onRequest
 	if ctx.Err = i.OnRequest(ctx); ctx.Err != nil {
-		goto RENDER
+		goto RESPONSE
 	}
 	ctx.Err = play.RunAction(ctx)
 
-RENDER:
-	if i.Render != nil {
-		i.Render(ctx)
+RESPONSE:
+	if i.Response != nil {
+		i.Response(ctx)
 	}
 }
 

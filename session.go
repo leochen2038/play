@@ -7,13 +7,13 @@ import (
 type Session struct {
 	SessId string
 	UserInfo interface{}
-	Client *Client
+	Conn *Conn
 	packer Packer
 }
 
-func NewSession(c *Client, packer Packer) *Session {
+func NewSession(c *Conn, packer Packer) *Session {
 	return &Session{
-		Client: c,
+		Conn: c,
 		SessId: uuid.New().String(),
 		packer: packer,
 	}
@@ -21,11 +21,11 @@ func NewSession(c *Client, packer Packer) *Session {
 
 func (s *Session) Write(output Output)  error {
 	if output != nil {
-		return s.packer.Write(s.Client, output)
+		return s.packer.Write(s.Conn, output)
 	}
 	return nil
 }
 
 func (s *Session)Close() {
-	s.Client.IsClose = true
+	s.Conn.IsClose = true
 }

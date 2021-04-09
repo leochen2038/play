@@ -11,7 +11,7 @@ type WebsocketJsonPacker struct  {
 
 }
 
-func (m *WebsocketJsonPacker)Read(c *play.Client, data []byte) (*play.Request, []byte, error) {
+func (m *WebsocketJsonPacker)Read(c *play.Conn, data []byte) (*play.Request, []byte, error) {
 	var request play.Request
 	request.Respond = true
 	request.ActionName, request.Render = ParseHttpPath(c.Http.Request.URL.Path)
@@ -20,7 +20,7 @@ func (m *WebsocketJsonPacker)Read(c *play.Client, data []byte) (*play.Request, [
 	return &request, nil, nil
 }
 
-func (m *WebsocketJsonPacker)Write(c *play.Client, output play.Output) error {
+func (m *WebsocketJsonPacker)Write(c *play.Conn, output play.Output) error {
 	var err error
 	var data []byte
 	var messageType = c.Websocket.MessageType

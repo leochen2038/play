@@ -22,20 +22,20 @@ type sseInstance struct {
 
 	packerDelegate   play.Packer
 	onRequestHandler func(ctx *play.Context) error
-	renderHandler  func(ctx *play.Context)
+	responseHandler  func(ctx *play.Context)
 }
 
-func NewSSEInstance(name string, addr string, packer play.Packer, render func(ctx *play.Context)) *sseInstance {
+func NewSSEInstance(name string, addr string, packer play.Packer, response func(ctx *play.Context)) *sseInstance {
 	i := &sseInstance{name: name, addr:addr}
 	if packer != nil {
 		i.packerDelegate = packer
 	} else {
 		i.packerDelegate = new(packers.SSEPacker)
 	}
-	if render != nil {
-		i.renderHandler = render
+	if response != nil {
+		i.responseHandler = response
 	} else {
-		i.renderHandler = func(ctx *play.Context) {
+		i.responseHandler = func(ctx *play.Context) {
 			_ = ctx.Session.Write(ctx.Output)
 		}
 	}
@@ -55,7 +55,7 @@ func (i *sseInstance)WithCertificate(cert tls.Certificate) *sseInstance {
 
 func (i *sseInstance)ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
-	var c = new(play.Client)
+	var c = new(play.Conn)
 	var s = play.NewSession(c, i.packerDelegate)
 	defer s.Close()
 
@@ -76,7 +76,7 @@ func (i *sseInstance)update(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (i *sseInstance)accept(s *play.Session) {
-	var w = s.Client.Http.Response
+	var w = s.Conn.Http.Response
 	_, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
@@ -88,13 +88,13 @@ func (i *sseInstance)accept(s *play.Session) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Transfer-Encoding", "chunked")
 
-	request, _, err := i.packerDelegate.Read(s.Client, nil)
+	request, _, err := i.packerDelegate.Read(s.Conn, nil)
 	if err != nil {
 		return
 	}
 
 	doRequest(i, s, request)
-	<-s.Client.Http.Request.Context().Done()
+	<-s.Conn.Http.Request.Context().Done()
 	s.Close()
 }
 
@@ -108,8 +108,8 @@ func (i *sseInstance) SetOnRequestHandler(handler func(ctx *play.Context) error)
 	i.onRequestHandler = handler
 }
 
-func (i *sseInstance)SetRenderHandler(handler func (ctx *play.Context)) {
-	i.renderHandler = handler
+func (i *sseInstance)SetResponseHandler(handler func (ctx *play.Context)) {
+	i.responseHandler = handler
 }
 
 func (i *sseInstance)Address() string {
@@ -128,9 +128,9 @@ func (i *sseInstance)OnRequest(ctx *play.Context) error {
 	}
 	return nil
 }
-func (i *sseInstance)Render(ctx *play.Context) {
-	if i.renderHandler != nil {
-		i.renderHandler(ctx)
+func (i *sseInstance)Response(ctx *play.Context) {
+	if i.responseHandler != nil {
+		i.responseHandler(ctx)
 	}
 }
 func (i *sseInstance)Run(listener net.Listener) error {

@@ -20,7 +20,7 @@ type httpInstance struct {
 	tlsConfig 		 *tls.Config
 	packerDelegate   play.Packer
 	onRequestHandler func(ctx *play.Context) error
-	renderHandler  func(ctx *play.Context)
+	responseHandler  func(ctx *play.Context)
 	wg               sync.WaitGroup
 	httpServer       http.Server
 	requestTimeout   time.Duration
@@ -30,17 +30,17 @@ func (i *httpInstance)SetWebsocket(websocket *websocketInstance) {
 	i.websocket = websocket
 }
 
-func NewHttpInstance(name string, addr string, packer play.Packer, render func(ctx *play.Context) ) *httpInstance {
+func NewHttpInstance(name string, addr string, packer play.Packer, response func(ctx *play.Context) ) *httpInstance {
 	i := &httpInstance{name:name, addr:addr}
 	if packer != nil {
 		i.packerDelegate = packer
 	} else {
 		i.packerDelegate = &packers.HttpPacker{InputMaxSize:1024*4, DefaultRender:"json"}
 	}
-	if render != nil {
-		i.renderHandler = render
+	if response != nil {
+		i.responseHandler = response
 	} else {
-		i.renderHandler = func(ctx *play.Context) {
+		i.responseHandler = func(ctx *play.Context) {
 			_ = ctx.Session.Write(ctx.Output)
 		}
 	}
@@ -49,7 +49,7 @@ func NewHttpInstance(name string, addr string, packer play.Packer, render func(c
 
 func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var request *play.Request
-	var c = new(play.Client)
+	var c = new(play.Conn)
 	var s = play.NewSession(c, i.packerDelegate)
 	defer s.Close()
 
@@ -100,14 +100,14 @@ func (i *httpInstance)OnRequest(ctx *play.Context) error {
 	return nil
 }
 
-func (i *httpInstance)Render(ctx *play.Context) {
-	if i.renderHandler != nil {
-		i.renderHandler(ctx)
+func (i *httpInstance)Response(ctx *play.Context) {
+	if i.responseHandler != nil {
+		i.responseHandler(ctx)
 	}
 }
 
-func (i *httpInstance)SetRenderHandler(handler func (ctx *play.Context)) {
-	i.renderHandler = handler
+func (i *httpInstance)SetResponseHandler(handler func (ctx *play.Context)) {
+	i.responseHandler = handler
 }
 
 

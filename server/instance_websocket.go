@@ -28,13 +28,13 @@ type websocketInstance struct {
 	packerDelegate   play.Packer
 
 	onRequestHandler func(ctx *play.Context) error
-	renderHandler  func(ctx *play.Context)
+	responseHandler  func(ctx *play.Context)
 }
 
 func (i *websocketInstance)ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var conn *websocket.Conn
-	var c = new(play.Client)
+	var c = new(play.Conn)
 	var s = play.NewSession(c, i.packerDelegate)
 	defer s.Close()
 
@@ -50,7 +50,7 @@ func (i *websocketInstance)ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (i *websocketInstance)accept(s *play.Session) {
-	if request, _, _ := i.packerDelegate.Read(s.Client, nil); request != nil {
+	if request, _, _ := i.packerDelegate.Read(s.Conn, nil); request != nil {
 		i.wg.Add(1)
 		doRequest(i, s, request)
 		i.wg.Done()
@@ -76,7 +76,7 @@ func (i *websocketInstance)update(w http.ResponseWriter, r *http.Request) (*webs
 
 func (i *websocketInstance)OnReady(session *play.Session) {
 	for {
-		messageType, message, err := session.Client.Websocket.WebsocketConn.ReadMessage()
+		messageType, message, err := session.Conn.Websocket.WebsocketConn.ReadMessage()
 		if err != nil {
 			if err == io.EOF {
 				log.Println("close")
@@ -85,8 +85,8 @@ func (i *websocketInstance)OnReady(session *play.Session) {
 			return
 		}
 
-		session.Client.Websocket.MessageType = messageType
-		request, _, err := i.packerDelegate.Read(session.Client, message)
+		session.Conn.Websocket.MessageType = messageType
+		request, _, err := i.packerDelegate.Read(session.Conn, message)
 		if request != nil {
 			i.wg.Add(1)
 			doRequest(i, session, request)
@@ -95,17 +95,17 @@ func (i *websocketInstance)OnReady(session *play.Session) {
 	}
 }
 
-func NewWebsocketInstance(name string, addr string, packer play.Packer, render func(ctx *play.Context)) *websocketInstance {
+func NewWebsocketInstance(name string, addr string, packer play.Packer, response func(ctx *play.Context)) *websocketInstance {
 	i := &websocketInstance{name: name, addr:addr}
 	if packer != nil {
 		i.packerDelegate = packer
 	} else {
 		i.packerDelegate = new(packers.WebsocketJsonPacker)
 	}
-	if render != nil {
-		i.renderHandler = render
+	if response != nil {
+		i.responseHandler = response
 	} else {
-		i.renderHandler = func(ctx *play.Context) {
+		i.responseHandler = func(ctx *play.Context) {
 			_ = ctx.Session.Write(ctx.Output)
 		}
 	}
@@ -144,13 +144,13 @@ func (i *websocketInstance)OnRequest(ctx *play.Context) error {
 	return nil
 }
 
-func (i *websocketInstance)SetRenderHandler(handler func(ctx *play.Context)) {
-	i.renderHandler = handler
+func (i *websocketInstance)SetResponseHandler(handler func(ctx *play.Context)) {
+	i.responseHandler = handler
 }
 
-func (i *websocketInstance)Render(ctx *play.Context) {
-	if i.renderHandler != nil {
-		i.renderHandler(ctx)
+func (i *websocketInstance)Response(ctx *play.Context) {
+	if i.responseHandler != nil {
+		i.responseHandler(ctx)
 	}
 }
 

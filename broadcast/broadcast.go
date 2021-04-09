@@ -13,8 +13,8 @@ type messageChan struct {
 }
 
 type Feedback struct {
-	session *play.Session
-	err error
+	Session *play.Session
+	Err error
 }
 
 type group struct {
@@ -41,7 +41,7 @@ func (g *group)broadcast() {
 							g.members.Delete(key)
 						}
 						if message.feedback != nil {
-							message.feedback <- Feedback{session: s, err: err}
+							message.feedback <- Feedback{Session: s, Err: err}
 						}
 					}
 					return true
