@@ -64,14 +64,12 @@ func (j *JsonParser) bindGJson(v reflect.Value, source gjson.Result, required st
 
 		item = source.Get(customKey)
 		if !item.Exists() {
-			if bind == "required" {
-				if defaultValue := tField.Tag.Get("default"); defaultValue != "" {
-					if err = setVal(vField, tField, defaultValue); err != nil {
-						return errors.New("input <" + customKey + "> " + err.Error())
-					}
-				} else {
-					return errors.New("input <" + fullKey + "> field is mismatch")
+			if defaultValue := tField.Tag.Get("default"); defaultValue != "" {
+				if err = setVal(vField, tField, defaultValue); err != nil {
+					return errors.New("input <" + customKey + "> " + err.Error())
 				}
+			} else if bind == "required" {
+				return errors.New("input <" + fullKey + "> field is mismatch")
 			}
 			continue
 		}

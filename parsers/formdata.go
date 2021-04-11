@@ -85,14 +85,12 @@ func (parser *FormDataParser) bindValues(v reflect.Value, prefix string, require
 
 		item = parser.values[customKey]
 		if len(item) == 0 {
-			if bind == "required" {
-				if defaultValue := tField.Tag.Get("default"); defaultValue != "" {
-					if err = setVal(vField, tField, defaultValue); err != nil {
-						return errors.New("input <" + customKey + "> " + err.Error())
-					}
-				} else {
-					return errors.New("input <" + customKey + "> field is mismatch")
+			if defaultValue := tField.Tag.Get("default"); defaultValue != "" {
+				if err = setVal(vField, tField, defaultValue); err != nil {
+					return errors.New("input <" + customKey + "> " + err.Error())
 				}
+			} else if bind == "required" {
+				return errors.New("input <" + customKey + "> field is mismatch")
 			}
 			continue
 		}
