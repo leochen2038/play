@@ -41,14 +41,15 @@ func (p *HttpPacker)Write(c *play.Conn, output play.Output)  error {
 
 func ParseHttpPath(path string) (action string, render string) {
 	if indexDot := strings.Index(path, "."); indexDot > 0 {
-		action = path[:indexDot]
 		render = path[indexDot+1:]
+		path = path[:indexDot]
 	}
 	if path == "/" || path == "" {
-		action = "/index"
+		path = "/index"
 	}
 
-	action = strings.ReplaceAll(action[1:], "/", ".")
+	action = strings.ReplaceAll(path[1:], "/", ".")
+
 	return
 }
 
