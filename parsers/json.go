@@ -63,7 +63,7 @@ func (j *JsonParser) bindGJson(v reflect.Value, source gjson.Result, required st
 		}
 
 		item = source.Get(customKey)
-		if !item.Exists() {
+		if !item.Exists() || item.Type == gjson.Null {
 			if defaultValue := tField.Tag.Get("default"); defaultValue != "" {
 				if err = setVal(vField, tField, defaultValue); err != nil {
 					return errors.New("input <" + customKey + "> " + err.Error())
@@ -104,9 +104,8 @@ func (j *JsonParser) bindGJson(v reflect.Value, source gjson.Result, required st
 		if tField.Type.Kind() == reflect.Slice {
 			var count int
 			if item.ForEach(func(key, value gjson.Result) bool {
-				var elem reflect.Value
 				count++
-
+				var elem reflect.Value
 				if elem, err = appendElem(vField, tField, value.String()); err != nil {
 					return false
 				}
