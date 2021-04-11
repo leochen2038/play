@@ -104,12 +104,14 @@ func (j *JsonParser) bindGJson(v reflect.Value, source gjson.Result, required st
 		if tField.Type.Kind() == reflect.Slice {
 			var count int
 			if item.ForEach(func(key, value gjson.Result) bool {
-				count++
 				var elem reflect.Value
-				if elem, err = appendElem(vField, tField, value.Raw); err != nil {
+				count++
+
+				if elem, err = appendElem(vField, tField, value.String()); err != nil {
 					return false
 				}
 				vField.Set(elem)
+
 				return true
 			}); err != nil {
 				return errors.New("input <" +  fullKey + "> " + err.Error())
