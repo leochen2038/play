@@ -28,7 +28,7 @@ func NewHttpParser(request *http.Request) play.Parser {
 		contentType = request.Header.Get("Content-Type")
 	}
 	
-	if strings.Contains(contentType, "json") {
+	if strings.Contains(contentType, "json") || strings.Contains(contentType, "octet-stream") {
 		raw, _ := ioutil.ReadAll(request.Body)
 		request.Body.Close()
 		request.Body = ioutil.NopCloser(bytes.NewBuffer(raw))
