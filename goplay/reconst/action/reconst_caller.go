@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-func genCallerFile(act action) {
+func genCallerCode(act action) {
 	if act.handlerList == nil {
 		return
 	}
@@ -23,10 +23,10 @@ func genCallerFile(act action) {
 	for _, v := range proc.next {
 		getFields(v, inputFields, outputFields)
 	}
-	getCallerCode(act.name, inputFields, outputFields)
+	getActionCode(act.name, inputFields, outputFields)
 }
 
-func getCallerCode(actionName string, input map[string]string, output map[string]string) {
+func getActionCode(actionName string, input map[string]string, output map[string]string) {
 	var structName string
 	tmp := strings.Split(actionName, ".")
 	for _, v := range tmp {
