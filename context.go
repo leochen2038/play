@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	intranetIp      net.IP = nil
+	intranetIp net.IP = nil
 )
 
 //type TcpPacker interface {
@@ -42,55 +42,55 @@ var (
 //	Http *http.Request
 //}
 
-
 type ActionInfo struct {
-	Name string
-	Tag string
+	Name        string
+	Tag         string
 	RequestTime time.Time
-	Timeout time.Duration
-	Respond bool
+	Timeout     time.Duration
+	Respond     bool
 }
 
 type TraceContext struct {
-	TraceId string
-	SpanId byte
-	StartTime time.Time
-	FinishTime time.Time
-	ParentSpanId []byte
+	TraceId       string
+	SpanId        byte
+	StartTime     time.Time
+	FinishTime    time.Time
+	ParentSpanId  []byte
 	OperationName string
-	ServerName string
+	ServerName    string
 }
 
 type Context struct {
-	values sync.Map
+	AppId      int
+	values     sync.Map
 	ActionInfo ActionInfo
-	Input       *Input
-	Output      Output
-	Session	*Session
-	Trace	TraceContext
-	Err error
-	ctx		context.Context
+	Input      *Input
+	Output     Output
+	Session    *Session
+	Trace      *TraceContext
+	Err        error
+	ctx        context.Context
 }
 
-func NewContextWithRequest(action ActionInfo, inputParser parsers.Parser, trace TraceContext, s *Session) *Context {
+func NewContextWithRequest(action ActionInfo, inputParser parsers.Parser, trace *TraceContext, s *Session) *Context {
 	return &Context{
 		ActionInfo: action,
-		Input: NewInput(inputParser),
-		Output: &KvOutput{},
-		Trace: trace,
-		Session: s,
-		ctx:context.Background(),
+		Input:      NewInput(inputParser),
+		Output:     &KvOutput{},
+		Trace:      trace,
+		Session:    s,
+		ctx:        context.Background(),
 	}
 }
-func (ctx *Context)Value(key string) (interface{}, bool) {
+func (ctx *Context) Value(key string) (interface{}, bool) {
 	return ctx.values.Load(key)
 }
 
-func (ctx *Context)SetValue(key string, val interface{}) {
+func (ctx *Context) SetValue(key string, val interface{}) {
 	ctx.values.Store(key, val)
 }
 
-func (ctx *Context)Context() context.Context {
+func (ctx *Context) Context() context.Context {
 	return ctx.ctx
 }
 

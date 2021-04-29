@@ -27,7 +27,15 @@ func ReconstAction() (err error) {
 	}
 	registerCode += "}"
 
-	updateRegister(env.ProjectPath, env.FrameworkName)
+	if err = updateRegister(env.ProjectPath, env.FrameworkName); err != nil {
+		return
+	}
+
+	// gen caller
+	if err = genCallerCode(actions); err != nil {
+		return
+	}
+
 	return
 }
 

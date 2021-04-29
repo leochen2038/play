@@ -2,39 +2,68 @@ package action
 
 import (
 	"fmt"
-	"github.com/leochen2038/goplay/reconst/env"
+	"github.com/leochen2038/play/goplay/reconst/env"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
+	"unicode"
 )
 
-func genCallerCode(act action) {
-	if act.handlerList == nil {
-		return
-	}
-	var inputFields = make(map[string]string)
-	var outputFields = make(map[string]string)
+func genCallerCode(actions map[string]action) error {
+	src := genHeader()
+	for _, act := range actions {
+		if act.handlerList == nil {
+			continue
+		}
+		var inputFields = make(map[string]string)
+		var outputFields = make(map[string]string)
 
-	proc := act.handlerList
-	getFields(proc, inputFields, outputFields)
-	for _, v := range proc.next {
-		getFields(v, inputFields, outputFields)
+		proc := act.handlerList
+		getFields(proc, inputFields, outputFields)
+		for _, v := range proc.next {
+			getFields(v, inputFields, outputFields)
+		}
+		src += genStruct(act.name, inputFields, outputFields)
 	}
-	getActionCode(act.name, inputFields, outputFields)
+	return genFile(src)
 }
 
-func getActionCode(actionName string, input map[string]string, output map[string]string) {
+func genFile(src string) (err error) {
+	if err = os.MkdirAll(fmt.Sprintf("%s/library/callers", env.ProjectPath), 0744); err != nil {
+		return
+	}
+	filePath := fmt.Sprintf("%s/library/callers/%s.go", env.ProjectPath, strings.ToLower(env.ModuleName))
+	if err = ioutil.WriteFile(filePath, []byte(src), 0644); err != nil {
+		return
+	}
+	if err = exec.Command(runtime.GOROOT()+"/bin/gofmt", "-w", filePath).Run(); err != nil {
+		fmt.Println(runtime.GOROOT()+"/bin/gofmt", filePath, err)
+		return
+	}
+	return
+}
+
+func genHeader() string {
+	src := "package callers\n\n"
+	src += `import "github.com/leochen2038/play"` + "\n\n"
+	return src
+}
+
+func genStruct(actionName string, input map[string]string, output map[string]string) string {
 	var structName string
 	tmp := strings.Split(actionName, ".")
 	for _, v := range tmp {
-		structName += strings.ToUpper(v[:1]) + v[1:]
+		if env.WithoutModuleName == 0 {
+			structName += formatUcfirstName(env.ModuleName + v)
+		} else {
+			structName += formatUcfirstName(v)
+		}
 	}
-	src := "package " + env.ModuleName + "\n\n"
-	src += `import "github.com/leochen2038/play"` + "\n\n"
-	src += "type " + structName + "Req struct {\n"
+
+	src := "type " + structName + "Req struct {\n"
 	for _, v := range input {
 		src += "\t" + v + "\n"
 	}
@@ -46,7 +75,7 @@ func getActionCode(actionName string, input map[string]string, output map[string
 	}
 	src += "}\n\n"
 
-	src += "func " + structName + "(c play.Caller, req "+structName+"Req, respond bool) (resp *"+structName+"Resp, err error) {\n"
+	src += "func " + structName + "(c play.Client, req " + structName + "Req, respond bool) (resp *" + structName + "Resp, err error) {\n"
 	src += fmt.Sprintf(`	var resByte []byte
 	if resByte, err = c.Call("%s", "%s", req, respond); err != nil {
 		return nil, err
@@ -55,18 +84,8 @@ func getActionCode(actionName string, input map[string]string, output map[string
 		err = c.ParseResponse(resByte, resp)
 	}
 	return`, env.ModuleName, actionName)
-	src += "\n}"
-	if err := os.MkdirAll(fmt.Sprintf("%s/library/caller/%s", env.ProjectPath, env.ModuleName), 0744); err != nil {
-		return
-	}
-	filePath := fmt.Sprintf("%s/library/caller/%s/%s.go", env.ProjectPath, env.ModuleName, structName)
-	if err := ioutil.WriteFile(filePath, []byte(src), 0644); err != nil {
-		return
-	}
-	if err := exec.Command(runtime.GOROOT()+"/bin/gofmt", "-w", filePath).Run(); err != nil {
-		fmt.Println(runtime.GOROOT()+"/bin/gofmt", filePath, err)
-		return
-	}
+	src += "\n}\n\n"
+	return src
 }
 
 func getFields(handler *processorHandler, input, output map[string]string) {
@@ -85,7 +104,7 @@ func getFields(handler *processorHandler, input, output map[string]string) {
 func findCode(structName string, data []byte) []byte {
 	var start, end, pop int
 
-	re := regexp.MustCompile(`\s+`+structName + ` struct`)
+	re := regexp.MustCompile(`\s+` + structName + ` struct`)
 	fi := re.FindIndex(data)
 
 	for i := fi[1]; i < len(data); i++ {
@@ -96,7 +115,7 @@ func findCode(structName string, data []byte) []byte {
 		}
 	}
 
-	for i := start+1; i < len(data); i++ {
+	for i := start + 1; i < len(data); i++ {
 		if data[i] == '{' {
 			pop++
 		} else if data[i] == '}' {
@@ -108,17 +127,17 @@ func findCode(structName string, data []byte) []byte {
 		}
 	}
 
-	return data[start:end+1]
+	return data[start : end+1]
 }
 
 type Parse struct {
-	Tag    int
-	Note  int
+	Tag       int
+	Note      int
 	CurStruct string
-	CurMap  int
-	Key    string
+	CurMap    int
+	Key       string
 	Value     []byte
-	Symble   []byte
+	Symble    []byte
 }
 
 type ParseMap struct {
@@ -126,14 +145,14 @@ type ParseMap struct {
 	Output map[string]string
 }
 
-func ParseInputOutputByCode (code string, input, output map[string]string) {
+func ParseInputOutputByCode(code string, input, output map[string]string) {
 	var parseMap = map[string]ParseMap{}
 	var parse = Parse{}
 	parse.Tag = 2
 	parse.CurStruct = "default"
 
 	codeArr := strings.Split(code, "\n")
-	for _,line := range codeArr {
+	for _, line := range codeArr {
 		if parse.Tag < 2 {
 			break
 		}
@@ -175,7 +194,7 @@ func parseLine(line string, parse *Parse, parseMap map[string]ParseMap, input, o
 	if isChange == 1 {
 		parseLine(line, parse, parseMap, input, output)
 	} else if isChange == 0 {
-		switch (parse.Tag) {
+		switch parse.Tag {
 		case 0:
 			line = strings.TrimSpace(line)
 			if line != "" {
@@ -216,14 +235,14 @@ func parseLine(line string, parse *Parse, parseMap map[string]ParseMap, input, o
 					if arr[0] == "Input" {
 						parse.Tag = 4
 						parse.CurMap = 1
-						if _,ok := parseMap[parse.CurStruct];!ok {
+						if _, ok := parseMap[parse.CurStruct]; !ok {
 							parseMap[parse.CurStruct] = ParseMap{Input: map[string]string{}, Output: map[string]string{}}
 						}
 						parseLine(line[ii:], parse, parseMap, input, output)
 					} else if arr[0] == "Output" {
 						parse.Tag = 4
 						parse.CurMap = 2
-						if _,ok := parseMap[parse.CurStruct];!ok {
+						if _, ok := parseMap[parse.CurStruct]; !ok {
 							parseMap[parse.CurStruct] = ParseMap{Input: map[string]string{}, Output: map[string]string{}}
 						}
 						parseLine(line[ii:], parse, parseMap, input, output)
@@ -329,7 +348,7 @@ func parseLine(line string, parse *Parse, parseMap map[string]ParseMap, input, o
 						parse.Symble = append(parse.Symble, v)
 					} else if len(parse.Symble) > 0 {
 						pre := (parse.Symble)[len(parse.Symble)-1]
-						if ((pre == '(' && v == ')') || (pre == '[' && v == ']') || (pre == '{' && v == '}')) {
+						if (pre == '(' && v == ')') || (pre == '[' && v == ']') || (pre == '{' && v == '}') {
 							if len(parse.Symble) > 1 {
 								parse.Symble = (parse.Symble)[0 : len(parse.Symble)-2]
 							} else {
@@ -407,4 +426,19 @@ func splitSpace(s string) []string {
 		arr = append(arr, string(temp))
 	}
 	return arr
+}
+
+func formatUcfirstName(name string) string {
+	var split []string
+	for _, v := range strings.Split(name, "_") {
+		split = append(split, ucfirst(v))
+	}
+	return strings.Join(split, "")
+}
+
+func ucfirst(str string) string {
+	for i, v := range str {
+		return string(unicode.ToUpper(v)) + str[i+1:]
+	}
+	return ""
 }

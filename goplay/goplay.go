@@ -36,6 +36,7 @@ The commands are:
 	env.FrameworkVer = "v0.5.6"
 	env.ProjectPath = os.Args[2]
 	env.GoVersion = runtime.Version()[2:]
+	env.WithoutModuleName = 0
 }
 
 func main() {

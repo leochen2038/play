@@ -18,15 +18,15 @@ import (
 )
 
 type runningInstance struct {
-	server play.ServerInstance
+	server   play.ServerInstance
 	listener net.Listener
 }
 
 var (
-	defaultActionTimeout = 500*time.Millisecond
-	instanceWaitGroup sync.WaitGroup
-	instances  sync.Map
-	ppidkilled bool
+	defaultActionTimeout = 500 * time.Millisecond
+	instanceWaitGroup    sync.WaitGroup
+	instances            sync.Map
+	ppidkilled           bool
 )
 
 const (
@@ -34,9 +34,9 @@ const (
 )
 
 const (
-	TypeHttp = 1
-	TypeTcp = 2
-	TypeSse = 3
+	TypeHttp      = 1
+	TypeTcp       = 2
+	TypeSse       = 3
 	TypeWebsocket = 4
 )
 
@@ -70,7 +70,7 @@ func Boot(i play.ServerInstance) error {
 	}
 	if _, ok := instances.Load(i.Name()); ok {
 		_ = listener.Close()
-		return errors.New("server name " +i.Name()+" is running")
+		return errors.New("server name " + i.Name() + " is running")
 	}
 
 	instanceWaitGroup.Add(1)
@@ -109,7 +109,8 @@ func doRequest(i play.ServerInstance, s *play.Session, request *play.Request) {
 		}
 	}()
 
-	ctx := play.NewContextWithRequest(action, request.Parser, trace, s)
+	ctx := play.NewContextWithRequest(action, request.Parser, &trace, s)
+	ctx.AppId = i.AppId()
 
 	// call custom onRequest
 	if ctx.Err = i.OnRequest(ctx); ctx.Err != nil {
@@ -140,7 +141,7 @@ func reload() (int, error) {
 		run := value.(runningInstance)
 		socket, _ := run.listener.(filer).File()
 		sockes = append(sockes, socket)
-		tags = append(tags, key.(string) + ":" + strconv.Itoa(socketId))
+		tags = append(tags, key.(string)+":"+strconv.Itoa(socketId))
 		socketId++
 		return true
 	})

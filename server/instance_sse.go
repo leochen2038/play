@@ -13,12 +13,13 @@ import (
 )
 
 type sseInstance struct {
-	addr string
-	name string
-	wg           sync.WaitGroup
+	addr  string
+	name  string
+	appId int
+	wg    sync.WaitGroup
 
-	tlsConfig 		 *tls.Config
-	httpServer       http.Server
+	tlsConfig  *tls.Config
+	httpServer http.Server
 
 	packerDelegate   play.Packer
 	onRequestHandler func(ctx *play.Context) error
@@ -26,7 +27,7 @@ type sseInstance struct {
 }
 
 func NewSSEInstance(name string, addr string, packer play.Packer, response func(ctx *play.Context)) *sseInstance {
-	i := &sseInstance{name: name, addr:addr}
+	i := &sseInstance{name: name, addr: addr}
 	if packer != nil {
 		i.packerDelegate = packer
 	} else {
@@ -43,7 +44,7 @@ func NewSSEInstance(name string, addr string, packer play.Packer, response func(
 	return i
 }
 
-func (i *sseInstance)WithCertificate(cert tls.Certificate) *sseInstance {
+func (i *sseInstance) WithCertificate(cert tls.Certificate) *sseInstance {
 	if i.tlsConfig == nil {
 		i.tlsConfig = &tls.Config{}
 	}
@@ -52,8 +53,7 @@ func (i *sseInstance)WithCertificate(cert tls.Certificate) *sseInstance {
 	return i
 }
 
-
-func (i *sseInstance)ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (i *sseInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var c = new(play.Conn)
 	var s = play.NewSession(c, i.packerDelegate)
@@ -67,7 +67,7 @@ func (i *sseInstance)ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	i.accept(s)
 }
 
-func (i *sseInstance)update(w http.ResponseWriter, r *http.Request) error {
+func (i *sseInstance) update(w http.ResponseWriter, r *http.Request) error {
 	accept := r.Header["Accept"]
 	if !(len(accept) > 0 && accept[0] == "text/event-stream") {
 		return errors.New("error event-stream accept type")
@@ -75,7 +75,7 @@ func (i *sseInstance)update(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (i *sseInstance)accept(s *play.Session) {
+func (i *sseInstance) accept(s *play.Session) {
 	var w = s.Conn.Http.Response
 	_, ok := w.(http.Flusher)
 	if !ok {
@@ -98,7 +98,7 @@ func (i *sseInstance)accept(s *play.Session) {
 	s.Close()
 }
 
-func (i *sseInstance)SetPackerDelegate(delegate play.Packer) {
+func (i *sseInstance) SetPackerDelegate(delegate play.Packer) {
 	if delegate != nil {
 		i.packerDelegate = delegate
 	}
@@ -108,32 +108,39 @@ func (i *sseInstance) SetOnRequestHandler(handler func(ctx *play.Context) error)
 	i.onRequestHandler = handler
 }
 
-func (i *sseInstance)SetResponseHandler(handler func (ctx *play.Context)) {
+func (i *sseInstance) SetResponseHandler(handler func(ctx *play.Context)) {
 	i.responseHandler = handler
 }
 
-func (i *sseInstance)Address() string {
-	return i.addr
-}
-func (i *sseInstance)Name() string {
-	return i.name
-}
-func (i *sseInstance)Type() int {
-	return TypeSse
+func (i *sseInstance) SetAppId(appId int) {
+	i.appId = appId
 }
 
-func (i *sseInstance)OnRequest(ctx *play.Context) error {
+func (i *sseInstance) Address() string {
+	return i.addr
+}
+func (i *sseInstance) Name() string {
+	return i.name
+}
+func (i *sseInstance) Type() int {
+	return TypeSse
+}
+func (i *sseInstance) AppId() int {
+	return i.appId
+}
+
+func (i *sseInstance) OnRequest(ctx *play.Context) error {
 	if i.onRequestHandler != nil {
 		return i.onRequestHandler(ctx)
 	}
 	return nil
 }
-func (i *sseInstance)Response(ctx *play.Context) {
+func (i *sseInstance) Response(ctx *play.Context) {
 	if i.responseHandler != nil {
 		i.responseHandler(ctx)
 	}
 }
-func (i *sseInstance)Run(listener net.Listener) error {
+func (i *sseInstance) Run(listener net.Listener) error {
 	i.httpServer.Handler = i
 	if i.tlsConfig != nil {
 		listener = tls.NewListener(listener, i.tlsConfig)
@@ -141,10 +148,10 @@ func (i *sseInstance)Run(listener net.Listener) error {
 	var err = i.httpServer.Serve(listener)
 	return err
 }
-func (i *sseInstance)Close() {
+func (i *sseInstance) Close() {
 	i.wg.Wait()
 }
 
-func (i *sseInstance)Packer() play.Packer {
+func (i *sseInstance) Packer() play.Packer {
 	return i.packerDelegate
 }

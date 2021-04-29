@@ -14,6 +14,7 @@ type TcpInstance struct {
 	defaultRender    string
 	addr             string
 	name             string
+	appId            int
 	packerDelegate   play.Packer
 	onAcceptHandler  func(client *play.Conn) (*play.Request, error)
 	onRequestHandler func(ctx *play.Context) error
@@ -22,7 +23,7 @@ type TcpInstance struct {
 }
 
 func NewSocketInstance(name string, addr string, packer play.Packer, response func(ctx *play.Context)) *TcpInstance {
-	i := &TcpInstance{name: name, addr:addr}
+	i := &TcpInstance{name: name, addr: addr}
 	if packer != nil {
 		i.packerDelegate = packer
 	} else {
@@ -38,7 +39,7 @@ func NewSocketInstance(name string, addr string, packer play.Packer, response fu
 	return i
 }
 
-func (i *TcpInstance)accept(conn net.Conn) {
+func (i *TcpInstance) accept(conn net.Conn) {
 	var err error
 	var request *play.Request
 	var c = new(play.Conn)
@@ -66,14 +67,13 @@ func (i *TcpInstance)accept(conn net.Conn) {
 	i.onReady(s)
 }
 
-func (i *TcpInstance)onReady(s *play.Session) {
+func (i *TcpInstance) onReady(s *play.Session) {
 	var err error
 	var surplus []byte
 	var buffer = make([]byte, 4096)
 	var n int
 	var request *play.Request
 	var conn = s.Conn.Tcp.Conn
-
 
 	for {
 		if n, err = conn.Read(buffer); err != nil {
@@ -101,47 +101,55 @@ func (i *TcpInstance)onReady(s *play.Session) {
 }
 
 // 实现 server接口
-func (i *TcpInstance)SetOnRequestHandler(handler func(ctx *play.Context) error) {
+func (i *TcpInstance) SetOnRequestHandler(handler func(ctx *play.Context) error) {
 	i.onRequestHandler = handler
 }
-func (i *TcpInstance)SetResponseHandler(handler func(ctx *play.Context)) {
+func (i *TcpInstance) SetResponseHandler(handler func(ctx *play.Context)) {
 	i.responseHandler = handler
 }
-func (i *TcpInstance)SetOnAcceptHandler(handler func(c *play.Conn) (*play.Request, error)) {
+func (i *TcpInstance) SetOnAcceptHandler(handler func(c *play.Conn) (*play.Request, error)) {
 	i.onAcceptHandler = handler
 }
-func (i *TcpInstance)OnRequest(ctx *play.Context) error {
+func (i *TcpInstance) OnRequest(ctx *play.Context) error {
 	if i.onRequestHandler != nil {
 		return i.onRequestHandler(ctx)
 	}
 	return nil
 }
 
-func (i *TcpInstance)Response(ctx *play.Context) {
+func (i *TcpInstance) Response(ctx *play.Context) {
 	if i.responseHandler != nil {
 		i.responseHandler(ctx)
 	}
 }
 
-func (i *TcpInstance)Address() string {
+func (i *TcpInstance) SetAppId(appId int) {
+	i.appId = appId
+}
+
+func (i *TcpInstance) Address() string {
 	return i.addr
 }
 
-func (i *TcpInstance)Name() string {
+func (i *TcpInstance) Name() string {
 	return i.name
 }
 
-func (i *TcpInstance)Type() int {
+func (i *TcpInstance) Type() int {
 	return TypeTcp
 }
 
-func (i *TcpInstance)SetPackerDelegate(delegate play.Packer) {
+func (i *TcpInstance) AppId() int {
+	return i.appId
+}
+
+func (i *TcpInstance) SetPackerDelegate(delegate play.Packer) {
 	if delegate != nil {
 		i.packerDelegate = delegate
 	}
 }
 
-func (i *TcpInstance)Run(listener net.Listener) error {
+func (i *TcpInstance) Run(listener net.Listener) error {
 	for {
 		if conn, err := listener.Accept(); err != nil {
 			fmt.Println("connect error:", err)
@@ -152,7 +160,7 @@ func (i *TcpInstance)Run(listener net.Listener) error {
 	}
 }
 
-func (i *TcpInstance)Close() {
+func (i *TcpInstance) Close() {
 	i.wg.Wait()
 }
 
