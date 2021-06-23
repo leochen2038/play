@@ -10,34 +10,33 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-var dbconnect *sql.DB = nil
-var connectingHost string
+var dbconnects sync.Map
 
 func getConnect(router string) (*sql.DB, error) {
 	var err error
 	var dest string
+	var dbconnect *sql.DB
 
 	if dest, err = config.String(router); err != nil {
 		return nil, fmt.Errorf("can not find mysql config")
 	}
 
-	if dbconnect == nil || dest != connectingHost {
+	connect, _ := dbconnects.Load(dest)
+	if connect == nil {
 		if dbconnect, err = sql.Open("mysql", dest); err != nil {
 			return nil, fmt.Errorf("can not find open mysql | %w", err)
 		}
 		if err = dbconnect.Ping(); err != nil {
 			return nil, fmt.Errorf("can not find ping mysql host | %w", err)
 		}
-
-		dbconnect.SetConnMaxLifetime(100)
-		dbconnect.SetMaxIdleConns(10)
-		connectingHost = dest
+		dbconnects.Store(dest, dbconnect)
 	}
 
-	return dbconnect, nil
+	return connect.(*sql.DB), nil
 }
 
 func GetList(dest interface{}, query *play.Query) (err error) {
@@ -519,16 +518,21 @@ func Delete(query *play.Query) (delcount int64, err error) {
 	return
 }
 
-func Save(meta interface{}, query *play.Query) (err error) {
+func Save(meta interface{}, query *play.Query) (id int64, err error) {
 	var conn *sql.DB
+	var res sql.Result
+
 	if conn, err = getConnect(query.Router); err != nil {
 		return
 	}
 
 	insert, values := intotext(meta)
 
-	_, err = conn.Exec("REPLACE INTO "+query.DBName+"."+query.Table+insert, values...)
+	res, err = conn.Exec("REPLACE INTO "+query.DBName+"."+query.Table+insert, values...)
 
+	if err == nil {
+		id, err = res.LastInsertId()
+	}
 	return
 }
 
