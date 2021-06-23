@@ -33,9 +33,11 @@ func getConnect(router string) (*sql.DB, error) {
 			return nil, fmt.Errorf("can not find ping mysql host | %w", err)
 		}
 
-		if _, ok := dbconnects.LoadOrStore(dest, dbconnect); ok {
+		if connect, ok := dbconnects.LoadOrStore(dest, dbconnect); ok {
 			_ = dbconnect.Close()
+			return connect.(*sql.DB), nil
 		}
+
 		dbconnect.SetConnMaxLifetime(100)
 		dbconnect.SetMaxIdleConns(10)
 		return dbconnect, nil
