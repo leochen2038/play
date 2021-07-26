@@ -17,7 +17,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.6.1 // indirect
-	github.com/tidwall/gjson v1.6.0
+	github.com/tidwall/gjson v1.6.5
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c // indirect
 	github.com/xdg/stringprep v1.0.0 // indirect
 	go.etcd.io/etcd v3.3.19+incompatible
