@@ -17,12 +17,11 @@ import (
 var dbconnect *mongo.Client = nil
 var connectingHost string
 
-func getConnect(dest string) (*mongo.Client, error) {
+func getConnect(ctx context.Context, dest string) (*mongo.Client, error) {
 	var err error
 	var mongoURI string
 
 	if dbconnect == nil || connectingHost != dest {
-		ctx := context.Background()
 		scheme := "mongodb"
 		username, password, host, _ := play.DecodeHost(scheme, dest)
 		if username == "" {
@@ -48,7 +47,7 @@ func getCollection(query *play.Query) (collection *mongo.Collection, err error) 
 	if destStr, err := config.String(query.Router); err != nil {
 		return nil, errors.New("unable find dest:" + query.Router)
 	} else {
-		if client, err = getConnect(destStr); err != nil {
+		if client, err = getConnect(query.Context, destStr); err != nil {
 			return nil, err
 		}
 		collection = client.Database(query.DBName).Collection(query.Table)
@@ -65,15 +64,13 @@ func GetList(dest interface{}, query *play.Query) (err error) {
 	var cursor *mongo.Cursor
 	filter := fetch(query)
 	options := findOptions(query)
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancelFunc()
 
-	if cursor, err = collection.Find(ctx, filter, options); err != nil {
+	if cursor, err = collection.Find(query.Context, filter, options); err != nil {
 		return
 	}
 
 	defer cursor.Close(context.Background())
-	err = cursor.All(ctx, dest)
+	err = cursor.All(query.Context, dest)
 
 	return
 }
@@ -86,10 +83,8 @@ func GetOne(dest interface{}, query *play.Query) (err error) {
 
 	filter := fetch(query)
 	options := findOneOptions(query)
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancelFunc()
 
-	err = collection.FindOne(ctx, filter, options).Decode(dest)
+	err = collection.FindOne(query.Context, filter, options).Decode(dest)
 	if err == mongo.ErrNoDocuments {
 		return play.ErrQueryEmptyResult
 	}
@@ -108,10 +103,8 @@ func UpdateAndGetOne(dest interface{}, query *play.Query) (err error) {
 
 	filter := fetch(query)
 	update := modifier(query)
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancelFunc()
 
-	err = collection.FindOneAndUpdate(ctx, filter, update).Decode(dest)
+	err = collection.FindOneAndUpdate(query.Context, filter, update).Decode(dest)
 	if err == mongo.ErrNoDocuments {
 		return play.ErrQueryEmptyResult
 	}
@@ -124,14 +117,11 @@ func Save(meta interface{}, upsetId *primitive.ObjectID, query *play.Query) (err
 		return
 	}
 
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancelFunc()
-
 	if upsetId == nil {
-		_, err = collection.InsertOne(ctx, meta)
+		_, err = collection.InsertOne(query.Context, meta)
 	} else {
 		filter := bson.M{"_id": upsetId}
-		_, err = collection.ReplaceOne(ctx, filter, meta)
+		_, err = collection.ReplaceOne(query.Context, filter, meta)
 	}
 
 	return
@@ -151,10 +141,7 @@ func Delete(query *play.Query) (modcount int64, err error) {
 
 	filter := fetch(query)
 
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancelFunc()
-
-	if result, err = collection.DeleteMany(ctx, filter); err != nil {
+	if result, err = collection.DeleteMany(query.Context, filter); err != nil {
 		return
 	}
 
@@ -175,10 +162,8 @@ func Update(query *play.Query) (modcount int64, err error) {
 
 	filter := fetch(query)
 	update := modifier(query)
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancelFunc()
 
-	if result, err = collection.UpdateMany(ctx, filter, update); err != nil {
+	if result, err = collection.UpdateMany(query.Context, filter, update); err != nil {
 		return
 	}
 
@@ -192,13 +177,10 @@ func SaveList(metaList interface{}, query *play.Query) (err error) {
 	}
 	var writes []mongo.WriteModel
 
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancelFunc()
-
 	for _, meta := range metaList.([]interface{}) {
 		writes = append(writes, mongo.NewInsertOneModel().SetDocument(meta))
 	}
-	_, err = collection.BulkWrite(ctx, writes)
+	_, err = collection.BulkWrite(query.Context, writes)
 	return
 }
 
@@ -209,10 +191,8 @@ func Count(query *play.Query) (count int64, err error) {
 	}
 
 	filter := fetch(query)
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancelFunc()
 
-	count, err = collection.CountDocuments(ctx, filter)
+	count, err = collection.CountDocuments(query.Context, filter)
 
 	return
 }
