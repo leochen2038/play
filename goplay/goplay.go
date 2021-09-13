@@ -16,13 +16,17 @@ var command string
 
 // 多包同名，可以在import进行引用别名
 func init() {
+	env.FrameworkName = "github.com/leochen2038/play"
+	env.FrameworkVer = "v0.6.1"
+
 	if len(os.Args) < 2 {
-		fmt.Println(`Usage:
+		fmt.Printf(`goplay version: %s
+Usage:
 	play <command> <arguments>
 
 The commands are:
 	init	init a new project
-	reconst	project path`)
+	reconst	project path`, env.FrameworkVer)
 		os.Exit(1)
 	}
 
@@ -32,8 +36,6 @@ The commands are:
 	}
 
 	command = os.Args[1]
-	env.FrameworkName = "github.com/leochen2038/play"
-	env.FrameworkVer = "v0.6.0"
 	env.ProjectPath = os.Args[2]
 	env.GoVersion = runtime.Version()[2:]
 	env.WithoutModuleName = 0

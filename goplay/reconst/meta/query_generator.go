@@ -149,27 +149,27 @@ import (
 
 	src += fmt.Sprintf(`
 type query%s struct {
-	query play.Query
+	QueryInfo play.Query
 }
 `, funcName)
 
 	var initFields string
 	for _, field := range meta.Fields.List {
-		initFields += fmt.Sprintf(`"%s":true,`, field.Name)
+		initFields += fmt.Sprintf(`"%s":{},`, field.Name)
 	}
-	initFields += fmt.Sprintf(`"%s":true`, meta.Key.Name)
+	initFields += fmt.Sprintf(`"%s":{}`, meta.Key.Name)
 
 	src += fmt.Sprintf(`
 func %s(c context.Context) *query%s {
 	obj := &query%s{}
-	obj.query.Module = "%s"
-	obj.query.Name = "%s"
-	obj.query.DBName = "%s"
-	obj.query.Table = "%s"
-	obj.query.Router = "%s"
-	obj.query.Context = c
-	obj.query.Sets = map[string][]interface{}{}
-	obj.query.Fields = map[string]bool{%s}
+	obj.QueryInfo.Module = "%s"
+	obj.QueryInfo.Name = "%s"
+	obj.QueryInfo.DBName = "%s"
+	obj.QueryInfo.Table = "%s"
+	obj.QueryInfo.Router = "%s"
+	obj.QueryInfo.Context = c
+	obj.QueryInfo.Sets = map[string][]interface{}{}
+	obj.QueryInfo.Fields = map[string]struct{}{%s}
 	return obj
 }
 `, funcName, funcName, funcName, meta.Module, meta.Name, meta.Strategy.Storage.Database, meta.Strategy.Storage.Table, meta.Strategy.Storage.Router, initFields)
@@ -179,7 +179,7 @@ func %s(c context.Context) *query%s {
 		for where, wherebool := range whereOr {
 			src += fmt.Sprintf(`
 func (q *query%s)%s%s%s(val interface{}) *query%s {
-	q.query.Conditions = append(q.query.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:val})
+	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:val})
 	return q
 }
 `, funcName, where, formatUcfirstName(meta.Key.Name), cond, funcName, wherebool, meta.Key.Name, cond)
@@ -190,7 +190,7 @@ func (q *query%s)%s%s%s(val interface{}) *query%s {
 			for where, wherebool := range whereOr {
 				src += fmt.Sprintf(`
 func (q *query%s)%s%s%s(val interface{}) *query%s {
-	q.query.Conditions = append(q.query.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:val})
+	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:val})
 	return q
 }
 `, funcName, where, ucfirst(vb.Name), cond, funcName, wherebool, vb.Name, cond)
@@ -203,7 +203,7 @@ func (q *query%s)%s%s%s(val interface{}) *query%s {
 		for where, wherebool := range whereOr {
 			src += fmt.Sprintf(`
 func (q *query%s)%s%s%s(v1 interface{}, v2 interface{}) *query%s {
-	q.query.Conditions = append(q.query.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:[2]interface{}{v1, v2}})
+	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:[2]interface{}{v1, v2}})
 	return q
 }
 `, funcName, where, formatUcfirstName(meta.Key.Name), cond, funcName, wherebool, meta.Key.Name, cond)
@@ -214,7 +214,7 @@ func (q *query%s)%s%s%s(v1 interface{}, v2 interface{}) *query%s {
 			for where, wherebool := range whereOr {
 				src += fmt.Sprintf(`
 func (q *query%s)%s%s%s(v1 interface{}, v2 interface{}) *query%s {
-	q.query.Conditions = append(q.query.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:[2]interface{}{v1, v2}})
+	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:[2]interface{}{v1, v2}})
 	return q
 }
 `, funcName, where, ucfirst(vb.Name), cond, funcName, wherebool, vb.Name, cond)
@@ -227,7 +227,7 @@ func (q *query%s)%s%s%s(v1 interface{}, v2 interface{}) *query%s {
 		for where, wherebool := range whereOr {
 			src += fmt.Sprintf(`
 func (q *query%s)%s%s%s(s []interface{}) *query%s {
-	q.query.Conditions = append(q.query.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:s})
+	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:s})
 	return q
 }
 `, funcName, where, formatUcfirstName(meta.Key.Name), cond, funcName, wherebool, meta.Key.Name, cond)
@@ -238,7 +238,7 @@ func (q *query%s)%s%s%s(s []interface{}) *query%s {
 			for where, wherebool := range whereOr {
 				src += fmt.Sprintf(`
 func (q *query%s)%s%s%s(s []%s) *query%s {
-	q.query.Conditions = append(q.query.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:s})
+	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:s})
 	return q
 }
 `, funcName, where, ucfirst(vb.Name), cond, getGolangType(vb.Type), funcName, wherebool, vb.Name, cond)
@@ -248,33 +248,33 @@ func (q *query%s)%s%s%s(s []%s) *query%s {
 
 	src += fmt.Sprintf(`
 func (q *query%s)OrderBy(key, val string) *query%s {
-	q.query.Order = append(q.query.Order, [2]string{key, val})
+	q.QueryInfo.Order = append(q.QueryInfo.Order, [2]string{key, val})
 	return q
 }
 `, funcName, funcName)
 
 	src += fmt.Sprintf(`
 func (q *query%s)GroupBy(key string) *query%s {
-	q.query.Group = append(q.query.Group, key)
+	q.QueryInfo.Group = append(q.QueryInfo.Group, key)
 	return q
 }
 `, funcName, funcName)
 	src += fmt.Sprintf(`
 func (q *query%s)Count() (int64, error) {
-	return %s.Count(&q.query)
+	return %s.Count(&q.QueryInfo)
 }
 `, funcName, meta.Strategy.Storage.Drive)
 
 	src += fmt.Sprintf(`
 func (q *query%s)Delete() (int64, error) {
-	return %s.Delete(&q.query)
+	return %s.Delete(&q.QueryInfo)
 }
 `, funcName, meta.Strategy.Storage.Drive)
 
 	src += fmt.Sprintf(`
 func (q *query%s)Limit(start int64, count int64) *query%s {
-	q.query.Limit[0] = start
-	q.query.Limit[1] = count
+	q.QueryInfo.Limit[0] = start
+	q.QueryInfo.Limit[1] = count
 	return q
 }
 `, funcName, funcName)
@@ -283,7 +283,7 @@ func (q *query%s)Limit(start int64, count int64) *query%s {
 		src += fmt.Sprintf(`
 func (q *query%s)UpdateAndGetOne() (*metas.%s, error) {
 	m := &metas.%s{}
-	if err := %s.UpdateAndGetOne(m, &q.query); err != nil {
+	if err := %s.UpdateAndGetOne(m, &q.QueryInfo); err != nil {
 		return nil, err 
 	}
 	return m, nil
@@ -295,7 +295,7 @@ func (q *query%s)UpdateAndGetOne() (*metas.%s, error) {
 		src += fmt.Sprintf(`
 func (q *query%s)GetOne() (*metas.%s, error) {
 	m := &metas.%s{}
-	if err := %s.GetOne(m, &q.query); err != nil {
+	if err := %s.GetOne(m, &q.QueryInfo); err != nil {
 		return nil, err 
 	}
 `, funcName, funcName, funcName, meta.Strategy.Storage.Drive)
@@ -314,7 +314,7 @@ func (q *query%s)GetOne() (*metas.%s, error) {
 		src += fmt.Sprintf(`
 func (q *query%s)GetOne() (*metas.%s, error) {
 	m := &metas.%s{}
-	if err := %s.GetOne(m, &q.query); err != nil {
+	if err := %s.GetOne(m, &q.QueryInfo); err != nil {
 		return nil, err 
 	}
 	return m, nil
@@ -325,7 +325,7 @@ func (q *query%s)GetOne() (*metas.%s, error) {
 	src += fmt.Sprintf(`
 func (q *query%s)GetList() ([]metas.%s, error) {
 	list := make([]metas.%s, 0)
-	err := %s.GetList(&list, &q.query)
+	err := %s.GetList(&list, &q.QueryInfo)
 `, funcName, funcName, funcName, meta.Strategy.Storage.Drive)
 	if len(arrayFieldList) > 0 {
 		src += fmt.Sprintf(`
@@ -357,25 +357,25 @@ func (q *query%s)GetList() ([]metas.%s, error) {
 func (q *query%s)Save(m *metas.%s) error {
 	%s
 	if m.Id != primitive.NilObjectID {
-		return %s.Save(m, &m.Id, &q.query)
+		return %s.Save(m, &m.Id, &q.QueryInfo)
 	}
 
 	%s
 	m.Id = primitive.NewObjectID()
-	return %s.Save(m, nil, &q.query)
+	return %s.Save(m, nil, &q.QueryInfo)
 }
 `, funcName, funcName, msrc, meta.Strategy.Storage.Drive, csrc, meta.Strategy.Storage.Drive)
 	} else {
 		src += fmt.Sprintf(`
 func (q *query%s)Save(m *metas.%s) error {
-	return %s.Save(m, &q.query)
+	return %s.Save(m, &q.QueryInfo)
 }
 `, funcName, funcName, meta.Strategy.Storage.Drive)
 	}
 
 	src += fmt.Sprintf(`
 func (q *query%s)Update() (int64, error) {
-	return %s.Update(&q.query)
+	return %s.Update(&q.QueryInfo)
 }
 `, funcName, meta.Strategy.Storage.Drive)
 
@@ -388,7 +388,7 @@ func (q *query%s)Set%s(val %s, opt ...string) *query%s {
 	} else {
 		args = append(args, val)
 	}
-	q.query.Sets["%s"] = args
+	q.QueryInfo.Sets["%s"] = args
 	return q
 }
 `, funcName, formatUcfirstName(field.Name), getGolangType(field.Type), funcName, field.Name)

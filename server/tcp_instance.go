@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/leochen2038/play"
@@ -47,20 +48,26 @@ func (i *TcpInstance) onReady(s *play.Session) (err error) {
 	var conn = s.Conn.Tcp.Conn
 
 	for {
-		if n, err = conn.Read(buffer); err != nil {
-			return
-		}
-		s.Conn.Tcp.Surplus = append(s.Conn.Tcp.Surplus, buffer[:n]...)
-		if true {
-			if request, err = i.transport.Receive(s.Conn); err != nil {
+		sessContext := s.Context()
+		select {
+		case <-sessContext.Done():
+			return sessContext.Err()
+		default:
+			if n, err = conn.Read(buffer); err != nil {
 				return
 			}
-			if request == nil {
-				continue
-			} else {
-				s.Conn.Tcp.Version = request.Version
-				if err = doRequest(s, request); err != nil {
-					return err
+			s.Conn.Tcp.Surplus = append(s.Conn.Tcp.Surplus, buffer[:n]...)
+			if true {
+				if request, err = i.transport.Receive(s.Conn); err != nil {
+					return
+				}
+				if request == nil {
+					continue
+				} else {
+					s.Conn.Tcp.Version = request.Version
+					if err = doRequest(s, request); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -86,11 +93,11 @@ func (i *TcpInstance) Ctrl() *play.InstanceCtrl {
 func (i *TcpInstance) Run(listener net.Listener) error {
 	for {
 		if conn, err := listener.Accept(); err != nil {
-			i.hook.OnConnect(play.NewSession(nil, i), err)
+			i.hook.OnConnect(play.NewSession(context.Background(), nil, i), err)
 			continue
 		} else {
 			go func() {
-				s := play.NewSession(new(play.Conn), i)
+				s := play.NewSession(context.Background(), new(play.Conn), i)
 				s.Conn.Tcp.Conn = conn
 				i.accept(s)
 			}()

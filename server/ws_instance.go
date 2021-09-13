@@ -39,7 +39,7 @@ func NewWsInstance(name string, addr string, transport play.ITransport, hook pla
 func (i *wsInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var conn *websocket.Conn
-	var sess = play.NewSession(nil, i)
+	var sess = play.NewSession(r.Context(), nil, i)
 
 	if conn, err = i.update(w, r); err != nil {
 		i.hook.OnConnect(sess, err)
@@ -76,18 +76,24 @@ func (i *wsInstance) accept(s *play.Session) {
 
 func (i *wsInstance) onReady(sess *play.Session) error {
 	for {
-		messageType, message, err := sess.Conn.Websocket.WebsocketConn.ReadMessage()
-		if err != nil {
-			return err
-		}
-
-		sess.Conn.Websocket.Message = message
-		sess.Conn.Websocket.MessageType = messageType
-
-		request, err := i.transport.Receive(sess.Conn)
-		if request != nil {
-			if err := doRequest(sess, request); err != nil {
+		sessContext := sess.Context()
+		select {
+		case <-sessContext.Done():
+			return sessContext.Err()
+		default:
+			messageType, message, err := sess.Conn.Websocket.WebsocketConn.ReadMessage()
+			if err != nil {
 				return err
+			}
+
+			sess.Conn.Websocket.Message = message
+			sess.Conn.Websocket.MessageType = messageType
+
+			request, err := i.transport.Receive(sess.Conn)
+			if request != nil {
+				if err := doRequest(sess, request); err != nil {
+					return err
+				}
 			}
 		}
 	}

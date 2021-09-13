@@ -65,7 +65,7 @@ func (i *httpInstance) Ctrl() *play.InstanceCtrl {
 func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var request *play.Request
-	var sess = play.NewSession(new(play.Conn), i)
+	var sess = play.NewSession(r.Context(), new(play.Conn), i)
 	sess.Conn.Http.Request, sess.Conn.Http.ResponseWriter = r, w
 
 	if i.ws != nil {

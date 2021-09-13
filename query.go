@@ -19,7 +19,7 @@ type Query struct {
 	DBName, Table string
 	Conditions    []Condition
 	Sets          map[string][]interface{}
-	Fields        map[string]bool
+	Fields        map[string]struct{}
 	Order         [][2]string
 	Limit         [2]int64
 	Group         []string

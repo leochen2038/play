@@ -42,7 +42,7 @@ func (i *sseInstance) WithCertificate(cert tls.Certificate) *sseInstance {
 
 func (i *sseInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
-	var sess = play.NewSession(nil, i)
+	var sess = play.NewSession(r.Context(), nil, i)
 
 	if err = i.update(r); err != nil {
 		i.hook.OnConnect(sess, err)
@@ -95,7 +95,7 @@ func (i *sseInstance) accept(s *play.Session) {
 		return
 	}
 
-	<-s.Conn.Http.Request.Context().Done()
+	<-s.Context().Done()
 }
 
 func (i *sseInstance) Run(listener net.Listener) error {

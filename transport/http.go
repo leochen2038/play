@@ -3,6 +3,7 @@ package transport
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/binder"
 	"github.com/leochen2038/play/library/golang/json"
@@ -37,6 +38,10 @@ func (p *httpTransport) Send(c *play.Conn, res *play.Response) (err error) {
 		err = SendJson(c.Http.ResponseWriter, res.Output)
 	case "html":
 		err = SendHtml(c.Http.ResponseWriter, p.TemplateFs, res.Template, res.Output)
+	case "nothing":
+		err = nil
+	default:
+		err = errors.New("undefined " + res.Render + " http response render")
 	}
 
 	return err
