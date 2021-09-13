@@ -492,7 +492,7 @@ func updatetext(query *play.Query) (string, []interface{}) {
 		}
 	}
 
-	if query.Fields["Fmtime"] && !find {
+	if _, ok := query.Fields["Fmtime"]; ok && !find {
 		fields = append(fields, "Fmtime = ?")
 		values = append(values, time.Now().Unix())
 	}
