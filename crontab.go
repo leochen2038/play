@@ -3,6 +3,7 @@ package play
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/leochen2038/play/library/etcd"
 	"github.com/robfig/cron/v3"
 	"io/ioutil"
 	"os"
@@ -49,39 +50,39 @@ func CronStop() {
 	_ = <-cronRunner.Stop().Done()
 }
 
-//func CronStartWithEtcd(etcd *etcd.EtcdAgent, key string, tryLocalFile string) {
-//	if data, err := etcd.GetEtcdValue(key); err != nil {
-//		if tryLocalFile != "" {
-//			if data, err = ioutil.ReadFile(tryLocalFile); err == nil {
-//				cronUpdate(data)
-//			}
-//		}
-//	} else {
-//		if err = cronUpdate(data); err == nil && tryLocalFile != "" {
-//			ioutil.WriteFile(tryLocalFile, data, 0644)
-//		}
-//	}
-//
-//	etcd.StartWatchChange(key, func(data []byte) (err error) {
-//		if err = cronUpdate(data); err == nil && tryLocalFile != "" {
-//			err = ioutil.WriteFile(tryLocalFile, data, 0644)
-//		}
-//		return
-//	})
-//}
+func CronStartWithEtcd(etcd *etcd.EtcdAgent, key string, tryLocalFile string) {
+	if data, err := etcd.GetEtcdValue(key); err != nil {
+		if tryLocalFile != "" {
+			if data, err = ioutil.ReadFile(tryLocalFile); err == nil {
+				cronUpdate(data)
+			}
+		}
+	} else {
+		if err = cronUpdate(data); err == nil && tryLocalFile != "" {
+			ioutil.WriteFile(tryLocalFile, data, 0644)
+		}
+	}
 
-//func CronStartWithFile(filename string, refashTickTime time.Duration) {
-//	if data, err := ioutil.ReadFile(filename); err == nil {
-//		cronUpdate(data)
-//	}
-//
-//	if refashTickTime > 0 {
-//		if fileinfo, err := os.Stat(filename); err == nil {
-//			cronLastFileModTime = fileinfo.ModTime().Unix()
-//		}
-//		startCronWatchFileChange(filename, refashTickTime)
-//	}
-//}
+	etcd.StartWatchChange(key, func(data []byte) (err error) {
+		if err = cronUpdate(data); err == nil && tryLocalFile != "" {
+			err = ioutil.WriteFile(tryLocalFile, data, 0644)
+		}
+		return
+	})
+}
+
+func CronStartWithFile(filename string, refashTickTime time.Duration) {
+	if data, err := ioutil.ReadFile(filename); err == nil {
+		cronUpdate(data)
+	}
+
+	if refashTickTime > 0 {
+		if fileinfo, err := os.Stat(filename); err == nil {
+			cronLastFileModTime = fileinfo.ModTime().Unix()
+		}
+		startCronWatchFileChange(filename, refashTickTime)
+	}
+}
 
 func startCronWatchFileChange(filename string, refashTickTime time.Duration) {
 	go func() {
