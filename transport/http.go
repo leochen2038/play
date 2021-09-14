@@ -13,31 +13,36 @@ import (
 	"strings"
 )
 
-type httpTransport struct {
-	InputMaxSize int64
-	HtdocsFs     embed.FS
-	TemplateFs   embed.FS
+type HttpTransport struct {
+	inputMaxSize  int64
+	htdocsFs      embed.FS
+	templateFs    embed.FS
+	defaultRender string
 }
 
-func NewHttpTransport(inputMaxSize int64, htdocsFs embed.FS, templateFs embed.FS) *httpTransport {
-	return &httpTransport{InputMaxSize: inputMaxSize, HtdocsFs: htdocsFs, TemplateFs: templateFs}
+func NewHttpTransport(inputMaxSize int64, defaultRender string, htdocsFs embed.FS, templateFs embed.FS) *HttpTransport {
+	return &HttpTransport{inputMaxSize: inputMaxSize, defaultRender: defaultRender, htdocsFs: htdocsFs, templateFs: templateFs}
 }
 
-func (p *httpTransport) Receive(c *play.Conn) (*play.Request, error) {
+func (p *HttpTransport) Receive(c *play.Conn) (*play.Request, error) {
 	var request = new(play.Request)
 
 	request.Respond = true
 	request.ActionName, request.Render = ParseHttpPath(c.Http.Request.URL.Path)
-	request.InputBinder = ParseHttpInput(c.Http.Request, p.InputMaxSize)
+	request.InputBinder = ParseHttpInput(c.Http.Request, p.inputMaxSize)
+
+	if request.Render == "" {
+		request.Render = p.defaultRender
+	}
 	return request, nil
 }
 
-func (p *httpTransport) Send(c *play.Conn, res *play.Response) (err error) {
+func (p *HttpTransport) Send(c *play.Conn, res *play.Response) (err error) {
 	switch res.Render {
 	case "json":
-		err = SendJson(c.Http.ResponseWriter, res.Output)
+		err = HttpSendJson(c.Http.ResponseWriter, res.Output)
 	case "html":
-		err = SendHtml(c.Http.ResponseWriter, p.TemplateFs, res.Template, res.Output)
+		err = HttpSendHtml(c.Http.ResponseWriter, p.templateFs, res.Template, res.Output)
 	case "nothing":
 		err = nil
 	default:
@@ -47,7 +52,7 @@ func (p *httpTransport) Send(c *play.Conn, res *play.Response) (err error) {
 	return err
 }
 
-func SendHtml(w http.ResponseWriter, tfs embed.FS, tp string, output play.Output) error {
+func HttpSendHtml(w http.ResponseWriter, tfs embed.FS, tp string, output play.Output) error {
 	var err error
 	var path = tp + ".html"
 	var t *template.Template
@@ -59,7 +64,7 @@ func SendHtml(w http.ResponseWriter, tfs embed.FS, tp string, output play.Output
 	return err
 }
 
-func SendJson(w http.ResponseWriter, output play.Output) error {
+func HttpSendJson(w http.ResponseWriter, output play.Output) error {
 	var err error
 	var data []byte
 

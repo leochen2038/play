@@ -10,6 +10,8 @@ import (
 	"unsafe"
 )
 
+var actionPools = make(map[string]*sync.Pool, 32)
+
 type Processor interface {
 	Run(ctx *Context) (string, error)
 }
@@ -23,8 +25,6 @@ type ProcessorWrap struct {
 	run  func(p Processor, ctx *Context) (string, error)
 	next map[string]*ProcessorWrap
 }
-
-var actionPools = make(map[string]*sync.Pool, 32)
 
 func RegisterAction(name string, new func() interface{}) {
 	actionPools[name] = &sync.Pool{New: new}
@@ -74,6 +74,9 @@ func RunAction(ctx *Context) (err error) {
 	for ok := true; ok; currentHandler, ok = currentHandler.next[flag] {
 		flag, err = currentHandler.run(currentHandler.p, ctx)
 		if ctx.ctx.Err() != nil {
+			if err != nil {
+				return err
+			}
 			return ctx.ctx.Err()
 		}
 		if err != nil {

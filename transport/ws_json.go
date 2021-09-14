@@ -7,10 +7,14 @@ import (
 	"github.com/leochen2038/play/library/golang/json"
 )
 
-type WebsocketJsonPacker struct {
+type WsJsonTransport struct {
 }
 
-func (m *WebsocketJsonPacker) Receive(c *play.Conn) (*play.Request, error) {
+func NewWsJsonTransport() *WsJsonTransport {
+	return new(WsJsonTransport)
+}
+
+func (m *WsJsonTransport) Receive(c *play.Conn) (*play.Request, error) {
 	var request play.Request
 	request.Respond = true
 	request.ActionName, request.Render = ParseHttpPath(c.Http.Request.URL.Path)
@@ -19,7 +23,7 @@ func (m *WebsocketJsonPacker) Receive(c *play.Conn) (*play.Request, error) {
 	return &request, nil
 }
 
-func (m *WebsocketJsonPacker) Send(c *play.Conn, res *play.Response) error {
+func (m *WsJsonTransport) Send(c *play.Conn, res *play.Response) error {
 	var err error
 	var data []byte
 	var messageType = c.Websocket.MessageType

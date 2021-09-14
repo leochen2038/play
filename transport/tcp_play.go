@@ -54,10 +54,14 @@ import (
 // 4  byte : rc状态码
 // 1  byte : protocol 0:二进制, 1:json
 
-type TcpPlayPacker struct {
+type TcpPlayTransport struct {
 }
 
-func (p *TcpPlayPacker) Receive(c *play.Conn) (*play.Request, error) {
+func NewTcpPlayTransport() *TcpPlayTransport {
+	return new(TcpPlayTransport)
+}
+
+func (p *TcpPlayTransport) Receive(c *play.Conn) (*play.Request, error) {
 	var err error
 	var buffer = c.Tcp.Surplus
 	if len(buffer) < 8 {
@@ -88,7 +92,7 @@ func (p *TcpPlayPacker) Receive(c *play.Conn) (*play.Request, error) {
 	return &request, nil
 }
 
-func (p *TcpPlayPacker) Send(c *play.Conn, res *play.Response) (err error) {
+func (p *TcpPlayTransport) Send(c *play.Conn, res *play.Response) (err error) {
 	var message []byte
 	var buffer []byte
 
