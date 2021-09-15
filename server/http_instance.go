@@ -70,6 +70,7 @@ func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if i.ws != nil {
 		if conn, _ := i.ws.update(w, r); conn != nil {
+			sess.Server = i.ws
 			sess.Conn.Websocket.WebsocketConn = conn
 			i.ws.accept(sess)
 			return
@@ -78,6 +79,7 @@ func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if i.sse != nil {
 		if err = i.sse.update(r); err == nil {
+			sess.Server = i.sse
 			i.sse.accept(sess)
 			return
 		}
