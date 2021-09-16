@@ -18,7 +18,12 @@ func (m *WsJsonTransport) Receive(c *play.Conn) (*play.Request, error) {
 	var request play.Request
 	request.Respond = true
 	request.ActionName, request.Render = ParseHttpPath(c.Http.Request.URL.Path)
-	request.InputBinder = binder.NewJsonBinder(c.Websocket.Message)
+
+	if len(c.Websocket.Message) > 0 {
+		request.InputBinder = binder.NewJsonBinder(c.Websocket.Message)
+	} else {
+		request.InputBinder = ParseHttpInput(c.Http.Request, 4096)
+	}
 
 	return &request, nil
 }
