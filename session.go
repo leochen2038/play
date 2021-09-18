@@ -24,9 +24,11 @@ func NewSession(cxt context.Context, c *Conn, server IServer) *Session {
 	return sess
 }
 
-func (s *Session) Write(res *Response) error {
+func (s *Session) Write(res *Response) (err error) {
 	if res != nil {
-		return s.Server.Transport().Send(s.Conn, res)
+		if err = s.Server.Transport().Send(s.Conn, res); err != nil {
+			s.ctxCancel()
+		}
 	}
 	return nil
 }

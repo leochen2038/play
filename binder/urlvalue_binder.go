@@ -37,7 +37,8 @@ func (parser *UrlValueBinder) bindValues(v reflect.Value, prefix string, require
 	var vField reflect.Value
 	var item []string
 	var fieldCount = v.Type().NumField()
-	var customKey string
+	var customKeys []string
+	var customKeystr string
 	var bind string // required, optional
 
 	for i := 0; i < fieldCount; i++ {
@@ -49,61 +50,68 @@ func (parser *UrlValueBinder) bindValues(v reflect.Value, prefix string, require
 		if tField.Tag.Get("bind") != "" {
 			bind = tField.Tag.Get("bind")
 		}
-		if customKey = tField.Tag.Get("key"); customKey == "" {
-			customKey = tField.Name
-		}
-		if prefix != "" {
-			customKey = prefix + "[" + customKey + "]"
+		if customKeystr = tField.Tag.Get("key"); customKeystr == "" {
+			customKeystr = tField.Name
 		}
 
-		if ex, ok := parser.exData[customKey]; ok {
-			if tField.Type.String() != reflect.TypeOf(ex).String() {
-				return errors.New("input custom " + customKey + " type need " + tField.Type.String() + " but " + reflect.TypeOf(ex).String() + " given")
+		customKeys = strings.Split(customKeystr, ",")
+		for _, customKey := range customKeys {
+			if prefix != "" {
+				customKey = prefix + "[" + customKey + "]"
 			}
-			vField.Set(reflect.ValueOf(ex))
-			continue
-		}
 
-		if tField.Type.Kind() == reflect.Struct && tField.Type.String() != "time.Time" {
-			if err = parser.bindValues(vField, customKey, bind); err != nil {
-				return
-			}
-			continue
-		}
-		if tField.Type.Kind() == reflect.Slice && vField.Type().Elem().Kind() == reflect.Struct && vField.Type().Elem().String() != "time.Time" {
-			var keyList = make(map[string]struct{}, 8)
-			for k, _ := range parser.values {
-				if strings.HasPrefix(k, customKey) {
-					if preKey, err := parseSliceKey(k, customKey); err != nil {
-						return err
-					} else {
-						keyList[preKey] = struct{}{}
-					}
+			if ex, ok := parser.exData[customKey]; ok {
+				if tField.Type.String() != reflect.TypeOf(ex).String() {
+					return errors.New("input custom " + customKey + " type need " + tField.Type.String() + " but " + reflect.TypeOf(ex).String() + " given")
 				}
+				vField.Set(reflect.ValueOf(ex))
+				goto NEXT
 			}
 
-			for k, _ := range keyList {
-				v := reflect.Indirect(reflect.New(vField.Type().Elem()))
-				if err = parser.bindValues(v, k, bind); err != nil {
+			if tField.Type.Kind() == reflect.Struct && tField.Type.String() != "time.Time" {
+				if err = parser.bindValues(vField, customKey, bind); err != nil {
 					return
 				}
-				vField.Set(reflect.Append(vField, v))
+				goto NEXT
 			}
-			continue
-		}
+			if tField.Type.Kind() == reflect.Slice && vField.Type().Elem().Kind() == reflect.Struct && vField.Type().Elem().String() != "time.Time" {
+				var keyList = make(map[string]struct{}, 8)
+				for k, _ := range parser.values {
+					if strings.HasPrefix(k, customKey) {
+						if preKey, err := parseSliceKey(k, customKey); err != nil {
+							return err
+						} else {
+							keyList[preKey] = struct{}{}
+						}
+					}
+				}
 
-		if tField.Type.Kind() == reflect.Slice {
-			customKey += "[]"
-		}
+				for k, _ := range keyList {
+					v := reflect.Indirect(reflect.New(vField.Type().Elem()))
+					if err = parser.bindValues(v, k, bind); err != nil {
+						return
+					}
+					vField.Set(reflect.Append(vField, v))
+				}
+				goto NEXT
+			}
 
-		item = parser.values[customKey]
+			if tField.Type.Kind() == reflect.Slice {
+				customKey += "[]"
+			}
+
+			item = parser.values[customKey]
+			if len(item) > 0 {
+				break
+			}
+		}
 		if len(item) == 0 {
 			if defaultValue := tField.Tag.Get("default"); defaultValue != "" {
 				if err = setVal(vField, tField, defaultValue); err != nil {
-					return errors.New("input <" + customKey + "> " + err.Error())
+					return errors.New("input <" + customKeystr + "> " + err.Error())
 				}
 			} else if bind == "required" {
-				return errors.New("input <" + customKey + "> field is mismatch")
+				return errors.New("input <" + customKeystr + "> field is mismatch")
 			}
 			continue
 		}
@@ -111,16 +119,17 @@ func (parser *UrlValueBinder) bindValues(v reflect.Value, prefix string, require
 		if tField.Type.Kind() == reflect.Slice {
 			for _, v := range item {
 				if elem, err := appendElem(vField, tField, v); err != nil {
-					return errors.New("input <" + customKey + "> " + err.Error())
+					return errors.New("input <" + customKeystr + "> " + err.Error())
 				} else {
 					vField.Set(elem)
 				}
 			}
 		} else {
 			if err = setVal(vField, tField, item[0]); err != nil {
-				return errors.New("input <" + customKey + "> " + err.Error())
+				return errors.New("input <" + customKeystr + "> " + err.Error())
 			}
 		}
+	NEXT:
 	}
 
 	return

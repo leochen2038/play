@@ -16,6 +16,10 @@ type Processor interface {
 	Run(ctx *Context) (string, error)
 }
 
+func GetActionPools() map[string]*sync.Pool {
+	return actionPools
+}
+
 func NewProcessorWrap(handle interface{ Processor }, run func(p Processor, ctx *Context) (string, error), next map[string]*ProcessorWrap) *ProcessorWrap {
 	return &ProcessorWrap{p: handle, run: run, next: next}
 }

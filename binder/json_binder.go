@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/tidwall/gjson"
 	"reflect"
+	"strings"
 )
 
 type JsonBinder struct {
@@ -61,20 +62,29 @@ func (j *JsonBinder) bindGJson(v reflect.Value, source gjson.Result, required st
 		if customKey = tField.Tag.Get("key"); customKey == "" {
 			customKey = tField.Name
 		}
-		if preKey != "" {
-			fullKey = preKey + "." + customKey
-		} else {
-			fullKey = customKey
-		}
-		if ex, ok := j.exData[customKey]; ok {
-			if tField.Type.String() != reflect.TypeOf(ex).String() {
-				return errors.New("input custom " + customKey + " type need " + tField.Type.String() + " but " + reflect.TypeOf(ex).String() + " given")
-			}
-			vField.Set(reflect.ValueOf(ex))
-			continue
-		}
+		customKeys := strings.Split(customKey, ",")
 
-		item = source.Get(customKey)
+		for _, v := range customKeys {
+			if preKey != "" {
+				fullKey = preKey + "." + v
+			} else {
+				fullKey = v
+			}
+			if ex, ok := j.exData[v]; ok {
+				if tField.Type.String() != reflect.TypeOf(ex).String() {
+					return errors.New("input custom " + v + " type need " + tField.Type.String() + " but " + reflect.TypeOf(ex).String() + " given")
+				}
+				vField.Set(reflect.ValueOf(ex))
+				//continue
+				goto NEXT
+			}
+
+			item = source.Get(v)
+			item.Exists()
+			if item.Exists() {
+				break
+			}
+		}
 		if !item.Exists() || item.Type == gjson.Null {
 			if defaultValue := tField.Tag.Get("default"); defaultValue != "" {
 				if err = setVal(vField, tField, defaultValue); err != nil {
@@ -135,6 +145,7 @@ func (j *JsonBinder) bindGJson(v reflect.Value, source gjson.Result, required st
 				return errors.New("input <" + fullKey + "> " + err.Error())
 			}
 		}
+	NEXT:
 	}
 	return
 }
