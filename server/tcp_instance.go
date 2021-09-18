@@ -28,8 +28,6 @@ func NewTcpInstance(name string, addr string, transport play.ITransport, hook pl
 
 func (i *TcpInstance) accept(s *play.Session) {
 	var err error
-	i.hook.OnConnect(s, nil)
-
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
 			err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
@@ -38,6 +36,7 @@ func (i *TcpInstance) accept(s *play.Session) {
 		i.hook.OnClose(s, err)
 	}()
 
+	i.hook.OnConnect(s, nil)
 	err = i.onReady(s)
 }
 

@@ -44,6 +44,10 @@ func (i *sseInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var sess = play.NewSession(r.Context(), nil, i)
 
+	defer func() {
+		recover()
+	}()
+
 	if err = i.update(r); err != nil {
 		i.hook.OnConnect(sess, err)
 		return

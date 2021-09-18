@@ -41,6 +41,10 @@ func (i *wsInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var conn *websocket.Conn
 	var sess = play.NewSession(r.Context(), nil, i)
 
+	defer func() {
+		recover()
+	}()
+
 	if conn, err = i.update(w, r); err != nil {
 		i.hook.OnConnect(sess, err)
 		return

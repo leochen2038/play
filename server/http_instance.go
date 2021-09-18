@@ -85,7 +85,6 @@ func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	i.hook.OnConnect(sess, nil)
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
 			err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
@@ -93,6 +92,7 @@ func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		i.hook.OnClose(sess, err)
 	}()
 
+	i.hook.OnConnect(sess, nil)
 	request, err = i.transport.Receive(sess.Conn)
 	err = doRequest(sess, request)
 }
