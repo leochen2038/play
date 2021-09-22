@@ -68,7 +68,7 @@ func HttpSendJson(w http.ResponseWriter, output play.Output) error {
 	var err error
 	var data []byte
 
-	if data, err = json.Marshal(output.All()); err != nil {
+	if data, err = json.MarshalEscape(output.All(), false, false); err != nil {
 		return err
 	}
 

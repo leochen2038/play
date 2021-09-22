@@ -32,7 +32,7 @@ func (p *SseTransport) Send(c *play.Conn, res *play.Response) error {
 	if res.Render != "json" {
 		return errors.New("undefined " + res.Render + " sse response render")
 	}
-	if data, err = json.Marshal(res.Output.All()); err != nil {
+	if data, err = json.MarshalEscape(res.Output.All(), false, false); err != nil {
 		return err
 	}
 

@@ -37,7 +37,7 @@ func (m *WsJsonTransport) Send(c *play.Conn, res *play.Response) error {
 		messageType = websocket.TextMessage
 	}
 
-	if data, err = json.Marshal(res.Output.All()); err != nil {
+	if data, err = json.MarshalEscape(res.Output.All(), false, false); err != nil {
 		return err
 	}
 

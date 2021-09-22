@@ -17,7 +17,7 @@ var command string
 // 多包同名，可以在import进行引用别名
 func init() {
 	env.FrameworkName = "github.com/leochen2038/play"
-	env.FrameworkVer = "v0.6.6"
+	env.FrameworkVer = "v0.6.8"
 
 	if len(os.Args) < 2 {
 		fmt.Printf(`goplay version: %s

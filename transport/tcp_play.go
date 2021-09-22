@@ -96,7 +96,7 @@ func (p *TcpPlayTransport) Send(c *play.Conn, res *play.Response) (err error) {
 	var message []byte
 	var buffer []byte
 
-	if message, err = json.Marshal(res.Output.All()); err != nil {
+	if message, err = json.MarshalEscape(res.Output.All(), false, false); err != nil {
 		return err
 	}
 

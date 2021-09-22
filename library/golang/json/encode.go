@@ -169,6 +169,20 @@ func Marshal(v interface{}) ([]byte, error) {
 	return buf, nil
 }
 
+func MarshalEscape(v interface{}, quoted bool, escapeHTML bool) ([]byte, error) {
+	e := newEncodeState()
+
+	err := e.marshal(v, encOpts{escapeHTML: escapeHTML, quoted: quoted})
+	if err != nil {
+		return nil, err
+	}
+	buf := append([]byte(nil), e.Bytes()...)
+
+	encodeStatePool.Put(e)
+
+	return buf, nil
+}
+
 // MarshalIndent is like Marshal but applies Indent to format the output.
 // Each JSON element in the output will begin on a new line beginning with prefix
 // followed by one or more copies of indent according to the indentation nesting.
