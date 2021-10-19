@@ -12,7 +12,7 @@ var (
 )
 
 var mu sync.RWMutex
-var list = make(map[string]*SocketPool, 16)
+var list = make(map[string]*SocketPool, 64)
 
 func GetSocketPoolBy(address string) (pool *SocketPool) {
 	var ok bool
@@ -21,7 +21,7 @@ func GetSocketPoolBy(address string) (pool *SocketPool) {
 	defer mu.Unlock()
 
 	if pool, ok = list[address]; !ok {
-		pool = newPlaySocketPool(16, func() (net.Conn, error) {
+		pool = newPlaySocketPool(64, func() (net.Conn, error) {
 			return net.DialTimeout("tcp", address, 500*time.Millisecond)
 		})
 		list[address] = pool
@@ -72,6 +72,7 @@ func (pool *SocketPool) putConn(conn *PlayConn) error {
 	case pool.connChans <- conn:
 		return nil
 	default:
+		conn.Unsable = true
 		return conn.Close()
 	}
 
