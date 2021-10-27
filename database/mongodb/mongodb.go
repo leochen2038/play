@@ -47,7 +47,7 @@ func getCollection(query *play.Query) (collection *mongo.Collection, err error) 
 	if destStr, err := config.String(query.Router); err != nil {
 		return nil, errors.New("unable find dest:" + query.Router)
 	} else {
-		if client, err = getConnect(query.Context, destStr); err != nil {
+		if client, err = getConnect(context.Background(), destStr); err != nil {
 			return nil, err
 		}
 		collection = client.Database(query.DBName).Collection(query.Table)
