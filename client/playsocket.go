@@ -9,15 +9,14 @@ import (
 )
 
 var noDeadline time.Time
-var DefaultVersion byte = 0x3
 
-func ConnectWithPlayTrace(trace *play.TraceContext, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+func ConnectWithPlayTrace(version byte, trace *play.TraceContext, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
 	trace.SpanId++
 	var spanId = make([]byte, 0, 16)
 	spanId = append(spanId, trace.ParentSpanId...)
 	spanId = append(spanId, trace.SpanId)
 
-	return _connect(DefaultVersion, address, callerId, trace.TraceId, spanId, trace.TagId, action, message, respond, timeout)
+	return _connect(version, address, callerId, trace.TraceId, spanId, trace.TagId, action, message, respond, timeout)
 }
 
 func _connect(version byte, address string, callerId int, traceId string, spanId []byte, tagId int, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
