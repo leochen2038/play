@@ -26,7 +26,7 @@ func NewSession(cxt context.Context, c *Conn, server IServer) *Session {
 
 func (s *Session) Write(res *Response) (err error) {
 	if res != nil {
-		if err = s.Server.Transport().Send(s.Conn, res); err != nil {
+		if err = s.Server.Transport().Response(s.Conn, res); err != nil {
 			s.ctxCancel()
 		}
 	}

@@ -37,7 +37,7 @@ func (p *HttpTransport) Receive(c *play.Conn) (*play.Request, error) {
 	return request, nil
 }
 
-func (p *HttpTransport) Send(c *play.Conn, res *play.Response) (err error) {
+func (p *HttpTransport) Response(c *play.Conn, res *play.Response) (err error) {
 	switch res.Render {
 	case "json":
 		err = HttpSendJson(c.Http.ResponseWriter, res.Output)

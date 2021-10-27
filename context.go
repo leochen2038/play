@@ -20,7 +20,6 @@ var (
 
 type ActionInfo struct {
 	Name        string
-	TagId       int
 	RequestTime time.Time
 	Timeout     time.Duration
 	Respond     bool
@@ -29,6 +28,7 @@ type ActionInfo struct {
 type TraceContext struct {
 	TraceId       string
 	SpanId        byte
+	TagId         int
 	StartTime     time.Time
 	FinishTime    time.Time
 	ParentSpanId  []byte
@@ -53,9 +53,9 @@ func NewContextWithRequest(s *Session, request *Request) *Context {
 		Name:        request.ActionName,
 		Respond:     request.Respond,
 		RequestTime: time.Now(),
-		Timeout:     defaultActionTimeout,
-		TagId:       request.TagId}
+		Timeout:     defaultActionTimeout}
 	var trace = TraceContext{
+		TagId:        request.TagId,
 		TraceId:      request.TraceId,
 		ParentSpanId: request.SpanId,
 		StartTime:    time.Now(),
@@ -77,6 +77,7 @@ func NewContextWithRequest(s *Session, request *Request) *Context {
 		ctx:        context.Background(),
 	}
 }
+
 func (ctx *Context) Value(key string) (interface{}, bool) {
 	return ctx.values.Load(key)
 }

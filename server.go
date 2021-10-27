@@ -35,7 +35,7 @@ type Binder interface {
 
 type ITransport interface {
 	Receive(c *Conn) (*Request, error)
-	Send(c *Conn, res *Response) error
+	Response(c *Conn, res *Response) error
 }
 
 type InstanceInfo struct {

@@ -92,7 +92,7 @@ func (p *TcpPlayTransport) Receive(c *play.Conn) (*play.Request, error) {
 	return &request, nil
 }
 
-func (p *TcpPlayTransport) Send(c *play.Conn, res *play.Response) (err error) {
+func (p *TcpPlayTransport) Response(c *play.Conn, res *play.Response) (err error) {
 	var message []byte
 	var buffer []byte
 
@@ -113,6 +113,10 @@ func (p *TcpPlayTransport) Send(c *play.Conn, res *play.Response) (err error) {
 	}
 
 	return
+}
+
+func (p *TcpPlayTransport) Request(request *play.Request) {
+
 }
 
 func packResponseProtocolV2(message []byte, traceId string) (buffer []byte) {
