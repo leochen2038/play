@@ -27,7 +27,7 @@ func _connect(version byte, address string, callerId int, traceId string, spanId
 	defer conn.Close()
 
 	if traceId == "" {
-		traceId = play.Generate28Id("", "", net.ParseIP(conn.LocalAddr().String()))
+		traceId = play.Generate28Id("trac", "", net.ParseIP(conn.LocalAddr().String()))
 	}
 	requestByte, protocolSize := buildRequestBytes(version, tagId, traceId, spanId, callerId, action, message, respond)
 
