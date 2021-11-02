@@ -30,7 +30,7 @@ func (s *Session) Write(res *Response) (err error) {
 			s.ctxCancel()
 		}
 	}
-	return nil
+	return err
 }
 
 func (s *Session) Close() {

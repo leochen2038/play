@@ -10,7 +10,7 @@ import (
 
 var noDeadline time.Time
 
-func ConnectWithPlayTrace(version byte, trace *play.TraceContext, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
+func RequestWithPlayTrace(version byte, trace *play.TraceContext, callerId int, address string, action string, message []byte, respond bool, timeout time.Duration) (reponseByte []byte, err error) {
 	trace.SpanId++
 	var spanId = make([]byte, 0, 16)
 	spanId = append(spanId, trace.ParentSpanId...)
@@ -33,7 +33,7 @@ func _connect(version byte, address string, callerId int, traceId string, spanId
 
 	if n, err := conn.Write(requestByte); err != nil || n != protocolSize {
 		conn.Unsable = true
-		return nil, fmt.Errorf("send message error %w", err)
+		return nil, fmt.Errorf("send message error %w, send:%d, protocolSize:%d", err, n, protocolSize)
 	}
 	if respond {
 		if timeout > 0 {
