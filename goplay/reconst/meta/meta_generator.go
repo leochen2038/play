@@ -67,6 +67,14 @@ func New%s() *%s {
 `, funcName, funcName, funcName, metaDefaultValue(meta.Fields.List))
 	src += "\n"
 
+	if meta.Key.Type != "auto" {
+		src += fmt.Sprintf(`func (m *%s)Set%s(val %s) *%s {
+	m.%s = val
+	return m
+}
+`, funcName, ucfirst(meta.Key.Name), getGolangType(meta.Key.Type), funcName, ucfirst(meta.Key.Name))
+	}
+
 	for _, vb := range meta.Fields.List {
 		src += fmt.Sprintf(`func (m *%s)Set%s(val %s) *%s {
 	m.%s = val
