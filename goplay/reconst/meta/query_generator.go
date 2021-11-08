@@ -366,11 +366,22 @@ func (q *query%s)Save(m *metas.%s) error {
 }
 `, funcName, funcName, msrc, meta.Strategy.Storage.Drive, csrc, meta.Strategy.Storage.Drive)
 	} else {
-		src += fmt.Sprintf(`
+		if meta.Key.Type == "auto" {
+			src += fmt.Sprintf(`
 func (q *query%s)Save(m *metas.%s) error {
-	return %s.Save(m, &q.QueryInfo)
+	id, err := %s.Save(m, &q.QueryInfo)
+	m.%s = int(id)
+	return err
+}
+`, funcName, funcName, meta.Strategy.Storage.Drive, formatUcfirstName(meta.Key.Name))
+		} else {
+			src += fmt.Sprintf(`
+func (q *query%s)Save(m *metas.%s) error {
+	_, err := %s.Save(m, &q.QueryInfo)
+	return err
 }
 `, funcName, funcName, meta.Strategy.Storage.Drive)
+		}
 	}
 
 	src += fmt.Sprintf(`

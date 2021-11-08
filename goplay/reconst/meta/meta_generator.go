@@ -72,7 +72,7 @@ func New%s() *%s {
 	m.%s = val
 	return m
 }
-`, funcName, ucfirst(meta.Key.Name), getGolangType(meta.Key.Type), funcName, ucfirst(meta.Key.Name))
+`, funcName, formatUcfirstName(meta.Key.Name), getGolangType(meta.Key.Type), funcName, formatUcfirstName(meta.Key.Name))
 	}
 
 	for _, vb := range meta.Fields.List {

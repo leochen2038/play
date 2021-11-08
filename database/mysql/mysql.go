@@ -519,15 +519,19 @@ func Delete(query *play.Query) (delcount int64, err error) {
 	return
 }
 
-func Save(meta interface{}, query *play.Query) (err error) {
+func Save(meta interface{}, query *play.Query) (id int64, err error) {
 	var conn *sql.DB
+	var res sql.Result
+
 	if conn, err = getConnect(query.Router); err != nil {
 		return
 	}
 
 	insert, values := intotext(meta)
 
-	_, err = conn.Exec("REPLACE INTO "+query.DBName+"."+query.Table+insert, values...)
+	if res, err = conn.Exec("REPLACE INTO "+query.DBName+"."+query.Table+insert, values...); err == nil {
+		id, _ = res.LastInsertId()
+	}
 
 	return
 }
