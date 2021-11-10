@@ -43,13 +43,13 @@ import (
 		if meta.Strategy.Storage.Type == "mongodb" {
 			src += "\t `bson:\"" + vb.Name + "\""
 			if vb.Alias != "" {
-				src += ` key:"` + vb.Alias + `"`
+				src += ` key:"` + vb.Alias + `" json:"` + vb.Alias + `"`
 			}
 			src += "`\n"
 		} else {
 			src += "\t `db:\"" + vb.Name + "\""
 			if vb.Alias != "" {
-				src += ` key:"` + vb.Alias + `"`
+				src += ` key:"` + vb.Alias + `" json:"` + vb.Alias + `"`
 			}
 			src += "`\n"
 		}
