@@ -21,7 +21,7 @@ import (
 	if meta.Strategy.Storage.Type == "mongodb" {
 		src += "primitive.ObjectID\t `bson:\"" + meta.Key.Name + "\""
 		if meta.Key.Alias != "" {
-			src += ` key:"` + meta.Key.Alias + `"`
+			src += ` key:"` + meta.Key.Alias + `" json:"` + meta.Key.Alias + `"`
 		}
 		src += "`\n"
 	} else if meta.Strategy.Storage.Type == "mysql" {
@@ -31,7 +31,7 @@ import (
 			src += meta.Key.Type + "\t `db:\"" + meta.Key.Name + "\""
 		}
 		if meta.Key.Alias != "" {
-			src += ` key:"` + meta.Key.Alias + `"`
+			src += ` key:"` + meta.Key.Alias + `" json:"` + meta.Key.Alias + `"`
 		}
 		src += "`\n"
 	}
