@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/tidwall/gjson"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -102,7 +103,6 @@ func (j *JsonBinder) bindGJson(v reflect.Value, source gjson.Result, required st
 			}
 			continue
 		}
-
 		if tField.Type.Kind() == reflect.Slice && vField.Type().Elem().Kind() == reflect.Struct && vField.Type().Elem().String() != "time.Time" {
 			var count int
 			item.ForEach(func(key, value gjson.Result) bool {
@@ -125,13 +125,17 @@ func (j *JsonBinder) bindGJson(v reflect.Value, source gjson.Result, required st
 
 		if tField.Type.Kind() == reflect.Slice {
 			var count int
+			var elems = vField
 			if item.ForEach(func(key, value gjson.Result) bool {
 				count++
-				var elem reflect.Value
-				if elem, err = appendElem(vField, tField, value.String()); err != nil {
+				//var elem reflect.Value
+				//if elem, err = appendElem(vField, tField, value.String()); err != nil {
+				//	return false
+				//}
+				if elems, err = setSliceValueWithGJson(vField.Type().String(), elems, &value); err != nil {
 					return false
 				}
-				vField.Set(elem)
+				vField.Set(elems)
 
 				return true
 			}); err != nil {
@@ -148,4 +152,42 @@ func (j *JsonBinder) bindGJson(v reflect.Value, source gjson.Result, required st
 	NEXT:
 	}
 	return
+}
+
+func setSliceValueWithGJson(fieldType string, elems reflect.Value, value *gjson.Result) (reflect.Value, error) {
+	if fieldType == "[]interface {}" {
+		elems = reflect.Append(elems, reflect.ValueOf(value.Value()))
+		return elems, nil
+	}
+	if fieldType != "[]string" && value.Type.String() != "Number" {
+		if _, err := strconv.ParseFloat(value.Str, 64); err != nil {
+			return elems, errors.New("data type need number")
+		}
+	}
+	switch fieldType {
+	case "[]string":
+		elems = reflect.Append(elems, reflect.ValueOf(value.String()))
+	case "[]int8":
+		elems = reflect.Append(elems, reflect.ValueOf(int8(value.Int())))
+	case "[]int32":
+		elems = reflect.Append(elems, reflect.ValueOf(int32(value.Int())))
+	case "[]int64":
+		elems = reflect.Append(elems, reflect.ValueOf(value.Int()))
+	case "[]int":
+		elems = reflect.Append(elems, reflect.ValueOf(int(value.Int())))
+	case "[]uint8":
+		elems = reflect.Append(elems, reflect.ValueOf(uint8(value.Uint())))
+	case "[]uint32":
+		elems = reflect.Append(elems, reflect.ValueOf(uint32(value.Uint())))
+	case "[]uint64":
+		elems = reflect.Append(elems, reflect.ValueOf(value.Uint()))
+	case "[]uint":
+		elems = reflect.Append(elems, reflect.ValueOf(uint(value.Uint())))
+	case "[]float32":
+		elems = reflect.Append(elems, reflect.ValueOf(float32(value.Float())))
+	case "[]float64":
+		elems = reflect.Append(elems, reflect.ValueOf(value.Float()))
+	}
+
+	return elems, nil
 }
