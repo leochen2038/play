@@ -115,7 +115,7 @@ func (parser *UrlValueBinder) bindValues(v reflect.Value, prefix string, require
 		item = parser.values[customKey]
 		if len(item) == 0 {
 			if defaultValue := tField.Tag.Get("default"); defaultValue != "" {
-				if err = setVal(vField, tField, defaultValue); err != nil {
+				if err = setVal(vField, tField, defaultValue, nil); err != nil {
 					return errors.New("input <" + customKey + "> " + err.Error())
 				}
 			} else if bind == "required" {
@@ -126,14 +126,14 @@ func (parser *UrlValueBinder) bindValues(v reflect.Value, prefix string, require
 
 		if tField.Type.Kind() == reflect.Slice {
 			for _, v := range item {
-				if elem, err := appendElem(vField, tField, v); err != nil {
+				if elem, err := appendElem(vField, tField, v, nil); err != nil {
 					return errors.New("input <" + customKey + "> " + err.Error())
 				} else {
 					vField.Set(elem)
 				}
 			}
 		} else {
-			if err = setVal(vField, tField, item[0]); err != nil {
+			if err = setVal(vField, tField, item[0], nil); err != nil {
 				return errors.New("input <" + customKey + "> " + err.Error())
 			}
 		}

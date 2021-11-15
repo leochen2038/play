@@ -2,6 +2,7 @@ package binder
 
 import (
 	"errors"
+	"github.com/tidwall/gjson"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -32,14 +33,14 @@ func parseSliceKey(k string, c string) (string, error) {
 	return "", errors.New(c + " is slice unknown error")
 }
 
-func appendElem(vField reflect.Value, tField reflect.StructField, str string) (reflect.Value, error) {
+func appendElem(vField reflect.Value, tField reflect.StructField, str string, gValue *gjson.Result) (reflect.Value, error) {
 	if regexPattern := tField.Tag.Get("regex"); regexPattern != "" {
 		if match, _ := regexp.MatchString(regexPattern, str); match == false {
 			return vField, errors.New("value is mismatch")
 		}
 	}
 
-	if val, err := parse(tField, str); err != nil {
+	if val, err := parse(tField, str, gValue); err != nil {
 		return vField, err
 	} else {
 		vField = reflect.Append(vField, reflect.ValueOf(val))
@@ -47,14 +48,14 @@ func appendElem(vField reflect.Value, tField reflect.StructField, str string) (r
 	return vField, nil
 }
 
-func setVal(vField reflect.Value, tField reflect.StructField, str string) error {
+func setVal(vField reflect.Value, tField reflect.StructField, str string, gValue *gjson.Result) error {
 	if regexPattern := tField.Tag.Get("regex"); regexPattern != "" {
 		if match, _ := regexp.MatchString(regexPattern, str); match == false {
 			return errors.New("value is mismatch")
 		}
 	}
 
-	if val, err := parse(tField, str); err != nil {
+	if val, err := parse(tField, str, gValue); err != nil {
 		return err
 	} else {
 		vField.Set(reflect.ValueOf(val))
@@ -62,10 +63,13 @@ func setVal(vField reflect.Value, tField reflect.StructField, str string) error 
 	return nil
 }
 
-func parse(tField reflect.StructField, str string) (interface{}, error) {
+func parse(tField reflect.StructField, str string, gValue *gjson.Result) (interface{}, error) {
 	switch strings.Trim(tField.Type.String(), "[]") {
 	case "interface {}":
-		return str, nil
+		if gValue == nil {
+			return str, nil
+		}
+		return gValue.Value(), nil
 	case "string":
 		return str, nil
 	case "time.Time":

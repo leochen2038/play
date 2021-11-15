@@ -88,7 +88,7 @@ func (j *JsonBinder) bindGJson(v reflect.Value, source gjson.Result, required st
 		}
 		if !item.Exists() || item.Type == gjson.Null {
 			if defaultValue := tField.Tag.Get("default"); defaultValue != "" {
-				if err = setVal(vField, tField, defaultValue); err != nil {
+				if err = setVal(vField, tField, defaultValue, &item); err != nil {
 					return errors.New("input <" + customKey + "> " + err.Error())
 				}
 			} else if bind == "required" {
@@ -145,7 +145,7 @@ func (j *JsonBinder) bindGJson(v reflect.Value, source gjson.Result, required st
 				return errors.New("input <" + fullKey + "> field is mismatch")
 			}
 		} else {
-			if err = setVal(vField, tField, item.String()); err != nil {
+			if err = setVal(vField, tField, item.String(), &item); err != nil {
 				return errors.New("input <" + fullKey + "> " + err.Error())
 			}
 		}
