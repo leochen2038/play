@@ -89,6 +89,7 @@ func (i *sseInstance) accept(s *play.Session) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Accel-Buffering", "no")
 
 	request, err := i.transport.Receive(s.Conn)
 	if err != nil {

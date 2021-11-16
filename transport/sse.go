@@ -6,6 +6,7 @@ import (
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/library/golang/json"
 	"net/http"
+	"runtime/debug"
 )
 
 type SseTransport struct {
@@ -28,6 +29,11 @@ func (p *SseTransport) Response(c *play.Conn, res *play.Response) error {
 	var err error
 	var data []byte
 	var w = c.Http.ResponseWriter
+	defer func() {
+		if panicInfo := recover(); panicInfo != nil {
+			err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
+		}
+	}()
 
 	if res.Render != "json" {
 		return errors.New("undefined " + res.Render + " sse response render")
