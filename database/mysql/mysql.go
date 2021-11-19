@@ -10,21 +10,22 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-var dbconnect *sql.DB = nil
-var connectingHost string
+var dbconnects sync.Map
 
 func getConnect(router string) (*sql.DB, error) {
 	var err error
 	var dest string
+	var dbconnect *sql.DB
 
 	if dest, err = config.String(router); err != nil {
 		return nil, fmt.Errorf("can not find mysql config")
 	}
 
-	if dbconnect == nil || dest != connectingHost {
+	if connect, _ := dbconnects.Load(dest); connect == nil {
 		if dbconnect, err = sql.Open("mysql", dest); err != nil {
 			return nil, fmt.Errorf("can not find open mysql | %w", err)
 		}
@@ -32,12 +33,17 @@ func getConnect(router string) (*sql.DB, error) {
 			return nil, fmt.Errorf("can not find ping mysql host | %w", err)
 		}
 
+		if connect, ok := dbconnects.LoadOrStore(dest, dbconnect); ok {
+			_ = dbconnect.Close()
+			return connect.(*sql.DB), nil
+		}
+
 		dbconnect.SetConnMaxLifetime(100)
 		dbconnect.SetMaxIdleConns(10)
-		connectingHost = dest
+		return dbconnect, nil
+	} else {
+		return connect.(*sql.DB), nil
 	}
-
-	return dbconnect, nil
 }
 
 func GetList(dest interface{}, query *play.Query) (err error) {
