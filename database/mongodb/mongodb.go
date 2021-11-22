@@ -2,7 +2,7 @@ package mongodb
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/config"
 	"go.mongodb.org/mongo-driver/bson"
@@ -11,17 +11,22 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 )
 
-var dbconnect *mongo.Client = nil
-var connectingHost string
+var dbconnects sync.Map
 
-func getConnect(ctx context.Context, dest string) (*mongo.Client, error) {
+func getConnect(ctx context.Context, router string) (*mongo.Client, error) {
 	var err error
 	var mongoURI string
+	var dest string
+	var dbconnect *mongo.Client
 
-	if dbconnect == nil || connectingHost != dest {
+	if dest, err = config.String(router); err != nil {
+		return nil, fmt.Errorf("can not find mongodb config:" + router)
+	}
+	if connect, _ := dbconnects.Load(dest); connect == nil {
 		scheme := "mongodb"
 		username, password, host, _ := play.DecodeHost(scheme, dest)
 		if username == "" {
@@ -33,25 +38,27 @@ func getConnect(ctx context.Context, dest string) (*mongo.Client, error) {
 		if dbconnect, err = mongo.NewClient(options.Client().ApplyURI(mongoURI).SetMaxPoolSize(1024)); err != nil {
 			return nil, err
 		}
+
 		if err = dbconnect.Connect(ctx); err != nil {
 			return nil, err
 		}
 
-		connectingHost = dest
+		if connect, ok := dbconnects.LoadOrStore(dest, dbconnect); ok {
+			return connect.(*mongo.Client), nil
+		}
+
+		return dbconnect, nil
+	} else {
+		return connect.(*mongo.Client), nil
 	}
-	return dbconnect, nil
 }
 
 func getCollection(query *play.Query) (collection *mongo.Collection, err error) {
 	var client *mongo.Client
-	if destStr, err := config.String(query.Router); err != nil {
-		return nil, errors.New("unable find dest:" + query.Router)
-	} else {
-		if client, err = getConnect(context.Background(), destStr); err != nil {
-			return nil, err
-		}
-		collection = client.Database(query.DBName).Collection(query.Table)
+	if client, err = getConnect(context.Background(), query.Router); err != nil {
+		return nil, err
 	}
+	collection = client.Database(query.DBName).Collection(query.Table)
 	return
 }
 
@@ -162,7 +169,6 @@ func Update(query *play.Query) (modcount int64, err error) {
 
 	filter := fetch(query)
 	update := modifier(query)
-
 	if result, err = collection.UpdateMany(query.Context, filter, update); err != nil {
 		return
 	}
