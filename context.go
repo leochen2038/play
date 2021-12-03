@@ -19,6 +19,7 @@ var (
 )
 
 type ActionInfo struct {
+	Caller      string
 	Name        string
 	RequestTime time.Time
 	Timeout     time.Duration
@@ -50,6 +51,7 @@ type Context struct {
 
 func NewContextWithRequest(s *Session, request *Request) *Context {
 	var action = ActionInfo{
+		Caller:      request.Caller,
 		Name:        request.ActionName,
 		Respond:     request.Respond,
 		RequestTime: time.Now(),
