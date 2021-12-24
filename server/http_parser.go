@@ -22,31 +22,34 @@ func NewHttpParser(request *http.Request) play.Parser {
 	contentType := request.Header.Get("Content-Type")
 	contentLength := request.Header.Get("Content-Length")
 	contentLengthInt, _ := strconv.Atoi(contentLength)
-	
+
 	if contentType == "" && contentLengthInt > 0 {
-		request.Header.Set("Content-Type","application/json")
+		request.Header.Set("Content-Type", "application/json")
 		contentType = request.Header.Get("Content-Type")
 	}
-	
+
 	if strings.Contains(contentType, "json") || strings.Contains(contentType, "octet-stream") {
 		raw, _ := ioutil.ReadAll(request.Body)
 		request.Body.Close()
 		request.Body = ioutil.NopCloser(bytes.NewBuffer(raw))
+		raw = ReturnJsonParam(raw)
 		return &JsonParser{json: gjson.GetBytes(raw, "@this")}
 	}
 
 	if strings.Contains(contentType, "form-urlencoded") {
 		_ = request.ParseForm()
+		DealPostParam(request)
 		return &HttpParser{values: request.Form}
 	}
 
 	if strings.Contains(contentType, "multipart/form-data") {
 		var maxMemory int64 = 1024 * 1024 * 10 // 10m
 		_ = request.ParseMultipartForm(maxMemory)
+		DealPostParam(request)
 		return &HttpParser{values: request.Form}
 	}
 
-	return &HttpParser{values: request.URL.Query()}
+	return &HttpParser{values: DealGetParam(request.URL.Query())}
 }
 
 func (i *HttpParser) GetVal(key string) (interface{}, error) {
