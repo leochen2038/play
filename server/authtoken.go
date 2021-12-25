@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -141,16 +142,36 @@ func ReturnJsonParam(raw []byte) []byte {
 		} else {
 			if ouid, ok := ws["uid"]; ok {
 				//fmt.Printf(`%T`, ouid)
-				uid = int(ouid.(float64))
+				ouidType := reflect.TypeOf(ouid).String()
+				if ouidType == "float64" {
+					uid = int(ouid.(float64))
+				} else if ouidType == "string" {
+					uid, _ = strconv.Atoi(ouid.(string))
+				}
 			}
 			if oudid, ok := ws["udid"]; ok {
-				udid = oudid.(string)
+				oudidType := reflect.TypeOf(oudid).String()
+				if oudidType == "float64" {
+					udid = strconv.Itoa(int(oudid.(float64)))
+				} else if oudidType == "string" {
+					udid = oudid.(string)
+				}
 			}
 			if odevice, ok := ws["device"]; ok {
-				device = int(odevice.(float64))
+				odeviceType := reflect.TypeOf(odevice).String()
+				if odeviceType == "float64" {
+					device = int(odevice.(float64))
+				} else if odeviceType == "string" {
+					device, _ = strconv.Atoi(odevice.(string))
+				}
 			}
 			if odeviceid, ok := ws["deviceid"]; ok {
-				deviceid = odeviceid.(string)
+				odeviceidType := reflect.TypeOf(odeviceid).String()
+				if odeviceidType == "float64" {
+					deviceid = strconv.Itoa(int(odeviceid.(float64)))
+				} else if odeviceidType == "string" {
+					deviceid = odeviceid.(string)
+				}
 			}
 		}
 		AllData["pre_token"] = ""
