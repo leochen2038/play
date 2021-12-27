@@ -82,9 +82,17 @@ func DealGetParam(Param map[string][]string) map[string][]string {
 	if v, ok := Param["authToken"]; ok {
 		token = v[0]
 		uid, udid, device, deviceid = DecodeNew(token)
-		Param["uid"] = []string{strconv.Itoa(uid)}
+		if uid == 0 {
+			Param["uid"] = []string{"0"}
+		} else {
+			Param["uid"] = []string{strconv.Itoa(uid)}
+		}
 		Param["udid"] = []string{udid}
-		Param["device"] = []string{strconv.Itoa(device)}
+		if device == 0 {
+			Param["device"] = []string{"0"}
+		} else {
+			Param["device"] = []string{strconv.Itoa(device)}
+		}
 		Param["deviceid"] = []string{deviceid}
 	} else {
 		token, _ = EncodeNew(uid, udid, device, deviceid)
@@ -109,9 +117,17 @@ func DealPostParam(request *http.Request) bool {
 	token = request.Form.Get("authToken")
 	if token != "" {
 		uid, udid, device, deviceid = DecodeNew(token)
-		request.Form.Add("uid", strconv.Itoa(uid))
+		if uid == 0 {
+			request.Form.Add("uid", "0")
+		} else {
+			request.Form.Add("uid", strconv.Itoa(uid))
+		}
 		request.Form.Add("udid", udid)
-		request.Form.Add("device", strconv.Itoa(device))
+		if device == 0 {
+			request.Form.Add("device", "0")
+		} else {
+			request.Form.Add("device", strconv.Itoa(device))
+		}
 		request.Form.Add("deviceid", deviceid)
 	} else if CheckParam(uid, udid, device, deviceid) {
 		token, _ = EncodeNew(uid, udid, device, deviceid)
@@ -222,7 +238,6 @@ func DecodeNew(Token string) (uid int, udid string, device int, deviceid string)
 	plainText := authByte[8 : size-8]
 	if data, err = Decrypt(plainText, key[:], reverse(key[:])); err != nil {
 		fmt.Println("aes decrypt error %w", err)
-		return 0, "", -1, ""
 	}
 	dataString := string(data)
 	Arr := strings.Split(dataString, "|")
