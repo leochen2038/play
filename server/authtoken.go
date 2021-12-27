@@ -117,6 +117,7 @@ func DealPostParam(request *http.Request) bool {
 	token = request.Form.Get("authToken")
 	if token != "" {
 		uid, udid, device, deviceid = DecodeNew(token)
+		fmt.Println(uid, udid, device, deviceid)
 		if uid == 0 {
 			request.Form.Add("uid", "0")
 		} else {
@@ -155,6 +156,13 @@ func ReturnJsonParam(raw []byte) []byte {
 			ws["device"] = device
 			ws["deviceid"] = device
 			raw, _ = json.Marshal(AllData)
+			if b, ok := AllData["b"]; ok {
+				bdata := b.(map[string]interface{})
+				bdata["uid"] = uid
+				bdata["udid"] = udid
+				bdata["device"] = device
+				bdata["deviceid"] = device
+			}
 		} else {
 			if ouid, ok := ws["uid"]; ok {
 				//fmt.Printf(`%T`, ouid)
