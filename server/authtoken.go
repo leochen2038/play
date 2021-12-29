@@ -154,16 +154,16 @@ func ReturnJsonParam(raw []byte) []byte {
 			ws["uid"] = uid
 			ws["udid"] = udid
 			ws["device"] = device
-			ws["deviceid"] = device
+			ws["deviceid"] = deviceid
 			raw, _ = json.Marshal(AllData)
 			if b, ok := AllData["b"]; ok {
 				bType := reflect.TypeOf(b).String()
 				if bType == "map[string]interface {}" {
 					bdata := b.(map[string]interface{})
-					bdata["uid"] = uid
+					bdata["uid"] = strconv.Itoa(uid)
 					bdata["udid"] = udid
-					bdata["device"] = device
-					bdata["deviceid"] = device
+					bdata["device"] = strconv.Itoa(device)
+					bdata["deviceid"] = deviceid
 				}
 			}
 		} else {
