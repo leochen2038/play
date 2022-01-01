@@ -145,7 +145,9 @@ func ReturnJsonParam(raw []byte) []byte {
 	var device int = -1
 	var deviceid string
 	var AllData map[string]interface{}
-	_ = json.Unmarshal(raw, &AllData)
+	if err := json.Unmarshal(raw, &AllData); err != nil {
+		return raw
+	}
 	if v, ok := AllData["h"]; ok {
 		ws := v.(map[string]interface{})
 		if tokenAuth, ok := ws["authToken"]; ok {
