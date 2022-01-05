@@ -265,6 +265,9 @@ func DecodeNew(Token string) (uid int, udid string, device int, deviceid string)
 //判断四个参数是否为空
 func CheckParam(uid int, udid string, device int, deviceid string) bool {
 	i := 0
+	if uid == 0 {
+		return false
+	}
 	if uid > 0 {
 		i++
 	}
