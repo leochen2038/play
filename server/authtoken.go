@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/leochen2038/play"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -67,6 +68,7 @@ func DealGetParam(Param map[string][]string) map[string][]string {
 	var udid string
 	var device int = -1
 	var deviceid string
+	var err error
 	if v, ok := Param["uid"]; ok {
 		uid, _ = strconv.Atoi(v[0])
 	}
@@ -81,7 +83,9 @@ func DealGetParam(Param map[string][]string) map[string][]string {
 	}
 	if v, ok := Param["authToken"]; ok {
 		token = v[0]
-		uid, udid, device, deviceid = DecodeNew(token)
+		if uid, udid, device, deviceid, err = DecodeNew(token); err != nil {
+			return Param
+		}
 		if uid == 0 {
 			Param["uid"] = []string{"0"}
 		} else {
@@ -108,6 +112,7 @@ func DealPostParam(request *http.Request) bool {
 	var udid string
 	var device int = -1
 	var deviceid string
+	var err error
 	uid, _ = strconv.Atoi(request.Form.Get("uid"))
 	udid = request.Form.Get("udid")
 	if request.Form.Get("device") != "" {
@@ -116,7 +121,9 @@ func DealPostParam(request *http.Request) bool {
 	deviceid = request.Form.Get("deviceid")
 	token = request.Form.Get("authToken")
 	if token != "" {
-		uid, udid, device, deviceid = DecodeNew(token)
+		if uid, udid, device, deviceid, err = DecodeNew(token); err != nil {
+			return true
+		}
 
 		if uid == 0 {
 			request.Form.Add("uid", "0")
@@ -145,6 +152,7 @@ func ReturnJsonParam(raw []byte) []byte {
 	var device int = -1
 	var deviceid string
 	var AllData map[string]interface{}
+	var err error
 	if err := json.Unmarshal(raw, &AllData); err != nil {
 		return raw
 	}
@@ -152,7 +160,9 @@ func ReturnJsonParam(raw []byte) []byte {
 		ws := v.(map[string]interface{})
 		if tokenAuth, ok := ws["authToken"]; ok {
 			token = tokenAuth.(string)
-			uid, udid, device, deviceid = DecodeNew(token)
+			if uid, udid, device, deviceid, err = DecodeNew(token); err != nil {
+				return raw
+			}
 			ws["uid"] = uid
 			ws["udid"] = udid
 			ws["device"] = device
@@ -210,7 +220,9 @@ func ReturnJsonParam(raw []byte) []byte {
 		}
 	} else if v, ok := AllData["authToken"]; ok {
 		token = v.(string)
-		uid, udid, device, deviceid = DecodeNew(token)
+		if uid, udid, device, deviceid, err = DecodeNew(token); err != nil {
+			return raw
+		}
 		AllData["uid"] = uid
 		AllData["udid"] = udid
 		AllData["device"] = device
@@ -241,25 +253,30 @@ func EncodeNew(uid int, udid string, device int, deviceid string) (token string,
 }
 
 //解密authToken
-func DecodeNew(Token string) (uid int, udid string, device int, deviceid string) {
-	var err error
+func DecodeNew(Token string) (uid int, udid string, device int, deviceid string, err error) {
 	var data []byte
 	var Salt = "xbl2021"
 	key := md5.Sum([]byte(Salt))
 	authByte, _ := base64.RawURLEncoding.DecodeString(Token)
 	size := len(authByte)
+	if size < 16 {
+		err = play.NewError("err authToken", 0x100, nil)
+		return
+	}
 	plainText := authByte[8 : size-8]
 	if data, err = Decrypt(plainText, key[:], reverse(key[:])); err != nil {
-		fmt.Println("aes decrypt error %w", err)
+		err = play.NewError("aes decrypt error", 0x100, err)
+		return
 	}
 	dataString := string(data)
 	Arr := strings.Split(dataString, "|")
 	if len(Arr) < 7 {
-		return 0, "", -1, ""
+		err = play.NewError("err data", 0x100, nil)
+		return
 	}
 	uid, _ = strconv.Atoi(Arr[3])
 	device, _ = strconv.Atoi(Arr[5])
-	return uid, Arr[4], device, Arr[6]
+	return uid, Arr[4], device, Arr[6], nil
 }
 
 //判断四个参数是否为空
