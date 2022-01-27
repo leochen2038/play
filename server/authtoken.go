@@ -264,6 +264,11 @@ func DecodeNew(Token string) (uid int, udid string, device int, deviceid string,
 		return
 	}
 	plainText := authByte[8 : size-8]
+	md5Sum := md5.Sum(plainText)
+	if base64.RawURLEncoding.EncodeToString(authByte[0:8]) != base64.RawURLEncoding.EncodeToString(md5Sum[0:8]) {
+		err = play.NewError("authToken 无效", 0x100, nil)
+		return
+	}
 	if data, err = Decrypt(plainText, key[:], reverse(key[:])); err != nil {
 		err = play.NewError("aes decrypt error", 0x100, err)
 		return
