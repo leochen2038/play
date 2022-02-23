@@ -29,7 +29,6 @@ type IServer interface {
 
 type Binder interface {
 	Bind(v reflect.Value) error
-	Get(key string) (interface{}, error)
 	Set(key string, val interface{})
 }
 
