@@ -81,6 +81,12 @@ func ParseHttpInput(request *http.Request, formMaxMemory int64) play.Binder {
 		request.Body = ioutil.NopCloser(bytes.NewBuffer(raw))
 		return binder.NewJsonBinder(raw)
 	}
+	if strings.Contains(contentType, "/bytes") {
+		raw, _ := ioutil.ReadAll(request.Body)
+		_ = request.Body.Close()
+		request.Body = ioutil.NopCloser(bytes.NewBuffer(raw))
+		return binder.NewBytesBinder(raw)
+	}
 
 	if strings.Contains(contentType, "/x-www-form-urlencoded") {
 		_ = request.ParseForm()
