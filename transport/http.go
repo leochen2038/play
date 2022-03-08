@@ -2,12 +2,9 @@ package transport
 
 import (
 	"bytes"
-	"embed"
 	"errors"
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/binder"
-	"github.com/leochen2038/play/library/golang/json"
-	"html/template"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -15,13 +12,11 @@ import (
 
 type HttpTransport struct {
 	inputMaxSize  int64
-	htdocsFs      embed.FS
-	templateFs    embed.FS
 	defaultRender string
 }
 
-func NewHttpTransport(inputMaxSize int64, defaultRender string, htdocsFs embed.FS, templateFs embed.FS) *HttpTransport {
-	return &HttpTransport{inputMaxSize: inputMaxSize, defaultRender: defaultRender, htdocsFs: htdocsFs, templateFs: templateFs}
+func NewHttpTransport(inputMaxSize int64) *HttpTransport {
+	return &HttpTransport{inputMaxSize: inputMaxSize, defaultRender: "json"}
 }
 
 func (p *HttpTransport) Receive(c *play.Conn) (*play.Request, error) {
@@ -41,10 +36,6 @@ func (p *HttpTransport) Response(c *play.Conn, res *play.Response) (err error) {
 	switch res.Render {
 	case "json":
 		err = HttpSendJson(c.Http.ResponseWriter, res.Output)
-	case "html":
-		err = HttpSendHtml(c.Http.ResponseWriter, p.templateFs, res.Template, res.Output)
-	case "nothing":
-		err = nil
 	default:
 		err = errors.New("undefined " + res.Render + " http response render")
 	}
@@ -52,23 +43,11 @@ func (p *HttpTransport) Response(c *play.Conn, res *play.Response) (err error) {
 	return err
 }
 
-func HttpSendHtml(w http.ResponseWriter, tfs embed.FS, tp string, output play.Output) error {
-	var err error
-	var path = tp + ".html"
-	var t *template.Template
-
-	if t, err = template.ParseFS(tfs, path); err != nil {
-		return err
-	}
-	err = t.Execute(w, output.All())
-	return err
-}
-
 func HttpSendJson(w http.ResponseWriter, output play.Output) error {
 	var err error
 	var data []byte
 
-	if data, err = json.MarshalEscape(output.All(), false, false); err != nil {
+	if data, err = output.ToJsonRaw(); err != nil {
 		return err
 	}
 
