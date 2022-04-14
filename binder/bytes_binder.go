@@ -2,7 +2,6 @@ package binder
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"strings"
 )
@@ -76,8 +75,6 @@ func (j *BytesBinder) _bind(v reflect.Value, required string, preKey string) (er
 				goto NEXT
 			}
 		}
-		fmt.Println(tField.Type.String())
-		fmt.Println(vField.Type().String())
 		if vField.Type().String() == "[]uint8" && len(j.data) > 0 {
 			vField.Set(reflect.ValueOf(j.data))
 		} else {
