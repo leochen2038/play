@@ -98,7 +98,7 @@ func DealGetParam(Param map[string][]string) map[string][]string {
 			Param["device"] = []string{strconv.Itoa(device)}
 		}
 		Param["deviceid"] = []string{deviceid}
-	} else {
+	} else if CheckParam(uid, udid, device, deviceid) {
 		token, _ = EncodeNew(uid, udid, device, deviceid)
 		Param["pre_token"] = []string{token}
 	}
