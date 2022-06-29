@@ -14,8 +14,7 @@ import (
 )
 
 var (
-	intranetIp           net.IP = nil
-	defaultActionTimeout        = 500 * time.Millisecond
+	intranetIp net.IP = nil
 )
 
 type ActionInfo struct {
@@ -38,6 +37,7 @@ type TraceContext struct {
 }
 
 type Context struct {
+	context.Context
 	ServerName string
 	values     sync.Map
 	ActionInfo ActionInfo
@@ -45,17 +45,19 @@ type Context struct {
 	Response   Response
 	Session    *Session
 	Trace      *TraceContext
-	Err        error
-	ctx        context.Context
+	err        error
+	gctx       context.Context
+	gcfunc     context.CancelFunc
 }
 
-func NewContextWithRequest(s *Session, request *Request) *Context {
+func NewPlayContext(parent context.Context, s *Session, request *Request, timeout time.Duration) *Context {
+	gctx, gcfunc := context.WithTimeout(parent, timeout)
 	var action = ActionInfo{
 		Caller:      request.Caller,
 		Name:        request.ActionName,
 		Respond:     request.Respond,
 		RequestTime: time.Now(),
-		Timeout:     defaultActionTimeout}
+		Timeout:     timeout}
 	var trace = TraceContext{
 		TagId:        request.TagId,
 		TraceId:      request.TraceId,
@@ -63,9 +65,7 @@ func NewContextWithRequest(s *Session, request *Request) *Context {
 		StartTime:    time.Now(),
 		ServerName:   request.ActionName}
 	var response = Response{
-		Output:   &KvOutput{},
 		TagId:    request.TagId,
-		Render:   request.Render,
 		SpanId:   request.SpanId,
 		TraceId:  request.TraceId,
 		Template: strings.ReplaceAll(request.ActionName, ".", "/")}
@@ -76,23 +76,31 @@ func NewContextWithRequest(s *Session, request *Request) *Context {
 		Response:   response,
 		Trace:      &trace,
 		Session:    s,
-		ctx:        context.Background(),
+		gctx:       gctx,
+		gcfunc:     gcfunc,
 	}
 }
 
-func (ctx *Context) Value(key string) (interface{}, bool) {
-	return ctx.values.Load(key)
+func (c *Context) Done() <-chan struct{} {
+	return c.gctx.Done()
 }
 
-func (ctx *Context) SetValue(key string, val interface{}) {
-	ctx.values.Store(key, val)
+func (c *Context) Deadline() (deadline time.Time, ok bool) {
+	return c.gctx.Deadline()
 }
 
-func (ctx *Context) Context() context.Context {
-	return ctx.ctx
+func (c *Context) Err() error {
+	if c.err != nil {
+		return c.err
+	}
+	return c.gctx.Err()
 }
 
-// 根据ip，按时间生成28位Id
+func (c *Context) Value(key interface{}) interface{} {
+	return c.gctx.Value(key)
+}
+
+// Generate28Id 根据ip，按时间生成28位Id
 func Generate28Id(prefix string, suffix string, ipv4 net.IP) string {
 	var x uint16
 	var timeNow = time.Now()

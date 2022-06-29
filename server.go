@@ -1,20 +1,23 @@
 package play
 
 import (
-	"github.com/gorilla/websocket"
 	"net"
 	"net/http"
 	"reflect"
 	"sync"
+
+	"github.com/gorilla/websocket"
+	"github.com/leochen2038/play/codec/binder"
+	"github.com/leochen2038/play/codec/render"
 )
 
 type IServerHook interface {
 	OnConnect(sess *Session, err error)
 	OnClose(sess *Session, err error)
 
-	OnRequest(ctx *Context)
-	OnResponse(ctx *Context)
-	OnFinish(ctx *Context)
+	OnRequest(ctx *Context) error
+	OnResponse(ctx *Context) error
+	OnFinish(ctx *Context) error
 }
 
 type IServer interface {
@@ -35,7 +38,7 @@ type Binder interface {
 
 type ITransport interface {
 	Receive(c *Conn) (*Request, error)
-	Response(c *Conn, res *Response) error
+	Send(c *Conn, res *Response) error
 }
 
 type InstanceInfo struct {
@@ -77,23 +80,23 @@ type Conn struct {
 }
 
 type Request struct {
-	Version     byte
-	Render      string
-	Caller      string
-	TagId       int
-	TraceId     string
-	SpanId      []byte
-	Respond     bool
-	ActionName  string
-	InputBinder Binder
+	Version      byte
+	Render       string
+	Caller       string
+	TagId        int
+	TraceId      string
+	SpanId       []byte
+	Respond      bool
+	ActionName   string
+	InputBinder  binder.Binder
+	OutputRender render.Render
 }
 
 type Response struct {
-	ErrorCode int
-	TagId     int
-	Render    string
-	TraceId   string
-	SpanId    []byte
-	Template  string
-	Output    Output
+	ErrorCode    int
+	TagId        int
+	TraceId      string
+	SpanId       []byte
+	Template     string
+	OutputRender Output
 }

@@ -28,7 +28,7 @@ func (m *WsJsonTransport) Receive(c *play.Conn) (*play.Request, error) {
 	return &request, nil
 }
 
-func (m *WsJsonTransport) Response(c *play.Conn, res *play.Response) error {
+func (m *WsJsonTransport) Send(c *play.Conn, res *play.Response) error {
 	var err error
 	var data []byte
 	var messageType = c.Websocket.MessageType

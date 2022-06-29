@@ -1,52 +1,29 @@
-package play
+package renders
 
 import (
-	"github.com/leochen2038/play/codec/render"
+	"errors"
+	"fmt"
+	"reflect"
+
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-type Output struct {
-	render render.Render
-	data   map[string]interface{}
+type protto3Render struct {
+	descriptor protoreflect.MessageDescriptor
 }
 
-func (o *Output) Get(key string) interface{} {
-	if key != "" {
-		val, _ := o.data[key]
-		return val
-	}
-	return o.data
+func GetProtto3Render(descriptor protoreflect.MessageDescriptor) Render {
+	return &protto3Render{descriptor: descriptor}
 }
 
-func (o *Output) All() interface{} {
-	return o.data
+func (r protto3Render) Name() string {
+	return "proto3"
 }
 
-func (o *Output) Set(key string, val interface{}) {
-	if o.data == nil {
-		o.data = make(map[string]interface{}, 10)
-	}
-	o.data[key] = val
-}
-
-func (o Output) Render() ([]byte, error) {
-	return o.render.Render(o.data)
-}
-
-func (o Output) RenderName() string {
-	return o.render.Name()
-}
-
-func (o *Output) SetRender(render render.Render) {
-	o.render = render
-}
-
-/*
-func (o *KvOutput) ToJsonRaw() (data []byte, err error) {
-	return json.MarshalEscape(o.data, false, false)
-}
-
-func (o *KvOutput) ToProtobuf(descriptor protoreflect.MessageDescriptor) (data []byte, err error) {
-	if message, err := _toProtobuf(o.data, descriptor); err != nil {
+func (r protto3Render) Render(data map[string]interface{}) ([]byte, error) {
+	if message, err := _toProtobuf(data, r.descriptor); err != nil {
 		return nil, err
 	} else {
 		return proto.Marshal(message)
@@ -149,4 +126,3 @@ func _convertProtobufVal(field protoreflect.FieldDescriptor, val interface{}) (p
 		return protoreflect.ValueOf(val), nil
 	}
 }
-*/

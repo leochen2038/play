@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play"
 	"net"
 	"runtime/debug"
+
+	"github.com/leochen2038/play"
 )
 
 type TcpInstance struct {
@@ -30,9 +31,12 @@ func (i *TcpInstance) accept(s *play.Session) {
 	var err error
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
-			err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
+			fmt.Printf("panic: %v\n%v", panicInfo, string(debug.Stack()))
 		}
 		_ = s.Conn.Tcp.Conn.Close()
+	}()
+
+	defer func() {
 		i.hook.OnClose(s, err)
 	}()
 
@@ -64,7 +68,7 @@ func (i *TcpInstance) onReady(s *play.Session) (err error) {
 					continue
 				} else {
 					s.Conn.Tcp.Version = request.Version
-					if err = doRequest(s, request); err != nil {
+					if err = doRequest(context.Background(), s, request); err != nil {
 						return err
 					}
 				}
@@ -96,6 +100,11 @@ func (i *TcpInstance) Run(listener net.Listener) error {
 			continue
 		} else {
 			go func() {
+				defer func() {
+					if panicInfo := recover(); panicInfo != nil {
+						// call system log ?
+					}
+				}()
 				s := play.NewSession(context.Background(), new(play.Conn), i)
 				s.Conn.Tcp.Conn = conn
 				i.accept(s)

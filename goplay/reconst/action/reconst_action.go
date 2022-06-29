@@ -16,18 +16,22 @@ var packages = map[string]string{}
 var crontab = map[string]struct{}{}
 
 func ReconstAction() (err error) {
+	var emptyAction = true
 	actions, err := getActions(env.ProjectPath + "/assets/action")
-
+	if err != nil {
+		return err
+	}
 	registerCode = "func init() {\n"
 	registerCode += genRegisterCronCode(env.ProjectPath + "/crontab")
 	for _, action := range actions {
+		emptyAction = false
 		registerCode += "\tplay.RegisterAction(\"" + action.name + "\", " + "func()interface{}{return "
 		genNextProcessorCode(action.handlerList, &action)
 		registerCode = registerCode[:len(registerCode)-1] + "})\n"
 	}
 	registerCode += "}"
 
-	if err = updateRegister(env.ProjectPath, env.FrameworkName); err != nil {
+	if err = updateRegister(env.ProjectPath, env.FrameworkName, emptyAction); err != nil {
 		return
 	}
 
@@ -101,14 +105,14 @@ func genNextProcessorCode(proc *processorHandler, act *action) {
 	registerCode += ","
 }
 
-func updateRegister(project, frameworkName string) (err error) {
+func updateRegister(project, frameworkName string, emptyAction bool) (err error) {
 	var module string
 	if module, err = parseModuleName(project); err != nil {
 		return
 	}
 
 	src := "package main\n\n"
-	if len(crontab) > 0 || len(packages) > 0 {
+	if len(crontab) > 0 || len(packages) > 0 || !emptyAction {
 		src += "import (\n\t\"" + frameworkName + "\"\n"
 	}
 	for k, _ := range crontab {
@@ -120,7 +124,7 @@ func updateRegister(project, frameworkName string) (err error) {
 	if len(packages) > 0 {
 		src += "\"unsafe\"\n"
 	}
-	if len(crontab) > 0 || len(packages) > 0 {
+	if len(crontab) > 0 || len(packages) > 0 || !emptyAction {
 		src += ")\n\n"
 	}
 

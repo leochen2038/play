@@ -25,7 +25,7 @@ func (p *SseTransport) Receive(c *play.Conn) (*play.Request, error) {
 	return &request, nil
 }
 
-func (p *SseTransport) Response(c *play.Conn, res *play.Response) error {
+func (p *SseTransport) Send(c *play.Conn, res *play.Response) error {
 	var err error
 	var data []byte
 	var w = c.Http.ResponseWriter

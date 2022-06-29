@@ -3,11 +3,12 @@ package transport
 import (
 	"bytes"
 	"errors"
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/binder"
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/codec/binder"
 )
 
 type HttpTransport struct {
@@ -32,7 +33,8 @@ func (p *HttpTransport) Receive(c *play.Conn) (*play.Request, error) {
 	return request, nil
 }
 
-func (p *HttpTransport) Response(c *play.Conn, res *play.Response) (err error) {
+func (p *HttpTransport) Send(c *play.Conn, res *play.Response) (err error) {
+
 	switch res.Render {
 	case "json":
 		err = HttpSendJson(c.Http.ResponseWriter, res.Output)

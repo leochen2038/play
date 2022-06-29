@@ -10,5 +10,6 @@ require (
 	github.com/tidwall/gjson v1.8.1
 	go.etcd.io/etcd/client/v3 v3.5.0
 	go.mongodb.org/mongo-driver v1.7.1
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/protobuf v1.27.1
 )

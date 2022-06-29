@@ -87,14 +87,17 @@ func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
-			err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
+			fmt.Printf("panic: %v\n%v", panicInfo, string(debug.Stack()))
 		}
+	}()
+	defer func() {
 		i.hook.OnClose(sess, err)
 	}()
-
 	i.hook.OnConnect(sess, nil)
-	request, err = i.transport.Receive(sess.Conn)
-	err = doRequest(sess, request)
+	if request, err = i.transport.Receive(sess.Conn); err != nil {
+		return
+	}
+	err = doRequest(r.Context(), sess, request)
 }
 
 func (i *httpInstance) SetWSInstance(ws *wsInstance) {

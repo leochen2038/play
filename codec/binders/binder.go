@@ -1,18 +1,24 @@
-package binder
+package binders
 
 import (
 	"errors"
-	"github.com/tidwall/gjson"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tidwall/gjson"
 )
 
 var (
 	TimeZone = "Local"
 )
+
+type Binder interface {
+	Bind(v reflect.Value, s reflect.StructField) error
+	Get(key string) interface{}
+}
 
 func parseSliceKey(k string, c string) (string, error) {
 	var kl, cl = len(k), len(c)
@@ -48,19 +54,85 @@ func appendElem(vField reflect.Value, tField reflect.StructField, str string, gV
 	return vField, nil
 }
 
-func setVal(vField reflect.Value, tField reflect.StructField, str string, gValue *gjson.Result) error {
+func setValWithGjson(vField reflect.Value, tField reflect.StructField, gValue gjson.Result) error {
+	var val interface{}
+	var err error
+
+	if err = checkRegex(tField, gValue.String()); err != nil {
+		return err
+	}
+
+	if tStr := strings.Trim(tField.Type.String(), "[]"); tStr == "interface {}" {
+		val = gValue.Value()
+	} else {
+		if val, err = parseInterface(tStr, gValue.String(), tField); err != nil {
+			return err
+		}
+	}
+	vField.Set(reflect.ValueOf(val))
+	return nil
+}
+
+func checkRegex(tField reflect.StructField, str string) error {
 	if regexPattern := tField.Tag.Get("regex"); regexPattern != "" {
 		if match, _ := regexp.MatchString(regexPattern, str); match == false {
 			return errors.New("value is mismatch")
 		}
 	}
+	return nil
+}
 
-	if val, err := parse(tField, str, gValue); err != nil {
+func setValWithString(vField reflect.Value, tField reflect.StructField, str string) error {
+	if err := checkRegex(tField, str); err != nil {
+		return err
+	}
+
+	if val, err := parseInterface(strings.Trim(tField.Type.String(), "[]"), str, tField); err != nil {
 		return err
 	} else {
 		vField.Set(reflect.ValueOf(val))
 	}
 	return nil
+}
+
+func parseInterface(t string, str string, tField reflect.StructField) (interface{}, error) {
+	switch t {
+	case "interface {}":
+		return str, nil
+	case "string":
+		return str, nil
+	case "time.Time":
+		return parseTime(tField, str)
+	case "bool":
+		return strconv.ParseBool(str)
+	case "byte":
+		return parseByte(str, 10)
+	case "int":
+		return strconv.Atoi(str)
+	case "int8":
+		return parseInt8(str, 10)
+	case "int16":
+		return parseInt16(str, 10)
+	case "int32":
+		return parseInt32(str, 10)
+	case "int64":
+		return parseInt64(str, 10)
+	case "uint":
+		return parseUint(str, 10)
+	case "uint8":
+		return parseUint8(str, 10)
+	case "uint16":
+		return parseUint16(str, 10)
+	case "uint32":
+		return parseUint32(str, 10)
+	case "uint64":
+		return parseUint64(str, 10)
+	case "float32":
+		return parseFloat32(str)
+	case "float64":
+		return strconv.ParseFloat(str, 64)
+	}
+	return nil, errors.New("not supported type " + tField.Type.String())
 }
 
 func parse(tField reflect.StructField, str string, gValue *gjson.Result) (interface{}, error) {

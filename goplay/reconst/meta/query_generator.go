@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play/goplay/reconst/env"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -12,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"unicode"
+
+	"github.com/leochen2038/play/goplay/reconst/env"
 )
 
 type Meta struct {
@@ -243,6 +244,24 @@ func (q *query%s)%s%s%s(s []%s) *query%s {
 }
 `, funcName, where, ucfirst(vb.Name), cond, getGolangType(vb.Type), funcName, wherebool, vb.Name, cond)
 			}
+		}
+	}
+	for k, v := range map[string]string{"Asc": "asc", "Desc": "desc"} {
+		// generate key
+		src += fmt.Sprintf(`
+func (q *query%s)OrderBy%s%s() *query%s {
+	q.QueryInfo.Order = append(q.QueryInfo.Order, [2]string{"%s", "%s"})
+	return q
+}
+`, funcName, formatUcfirstName(meta.Key.Name), k, funcName, meta.Key.Name, v)
+		// generate fields
+		for _, vb := range meta.Fields.List {
+			src += fmt.Sprintf(`
+func (q *query%s)OrderBy%s%s() *query%s {
+	q.QueryInfo.Order = append(q.QueryInfo.Order, [2]string{"%s", "%s"})
+	return q
+}
+`, funcName, ucfirst(vb.Name), k, funcName, vb.Name, v)
 		}
 	}
 

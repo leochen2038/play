@@ -1,15 +1,17 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/gorilla/websocket"
-	"github.com/leochen2038/play"
 	"net"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/gorilla/websocket"
+	"github.com/leochen2038/play"
 )
 
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
@@ -61,16 +63,19 @@ func (i *wsInstance) accept(s *play.Session) {
 	var err error
 	var request *play.Request
 
-	i.hook.OnConnect(s, nil)
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
-			err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
+			fmt.Printf("panic: %v\n%v", panicInfo, string(debug.Stack()))
 		}
-		i.hook.OnClose(s, err)
 	}()
 
+	defer func() {
+		i.hook.OnClose(s, err)
+	}()
+	i.hook.OnConnect(s, nil)
+
 	if request, err = i.transport.Receive(s.Conn); request != nil {
-		if err = doRequest(s, request); err != nil {
+		if err = doRequest(context.Background(), s, request); err != nil {
 			return
 		}
 	}
@@ -93,9 +98,10 @@ func (i *wsInstance) onReady(sess *play.Session) error {
 			sess.Conn.Websocket.Message = message
 			sess.Conn.Websocket.MessageType = messageType
 
-			request, err := i.transport.Receive(sess.Conn)
-			if request != nil {
-				if err := doRequest(sess, request); err != nil {
+			if request, err := i.transport.Receive(sess.Conn); err != nil {
+				return err
+			} else {
+				if err := doRequest(context.Background(), sess, request); err != nil {
 					return err
 				}
 			}

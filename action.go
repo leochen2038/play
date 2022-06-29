@@ -7,17 +7,39 @@ import (
 	"reflect"
 	"runtime/debug"
 	"sync"
+	"time"
 	"unsafe"
 )
 
-var actionPools = make(map[string]*sync.Pool, 32)
+type action struct {
+	subsidiary    string
+	metaData      map[string]string
+	timeout       int32
+	instancesPool sync.Pool
+	newHandle     func() interface{}
+}
+
+func (act action) MetaData() map[string]string {
+	return act.metaData
+}
+func (act action) Timeout() int32 {
+	return act.timeout
+}
+func (act action) Instance() *ProcessorWrap {
+	return act.newHandle().(*ProcessorWrap)
+}
+
+var ActionDefaultTimeout int32 = 500
+var actions = make(map[string]*action, 32)
 
 type Processor interface {
 	Run(ctx *Context) (string, error)
 }
 
-func GetActionPools() map[string]*sync.Pool {
-	return actionPools
+func SetActionTimeout(name string, timeout int32) {
+	if v, ok := actions[name]; ok {
+		v.timeout = timeout
+	}
 }
 
 func NewProcessorWrap(handle interface{ Processor }, run func(p Processor, ctx *Context) (string, error), next map[string]*ProcessorWrap) *ProcessorWrap {
@@ -30,8 +52,8 @@ type ProcessorWrap struct {
 	next map[string]*ProcessorWrap
 }
 
-func RegisterAction(name string, new func() interface{}) {
-	actionPools[name] = &sync.Pool{New: new}
+func RegisterAction(name string, metaData map[string]string, timeout int32, new func() interface{}) {
+	actions[name] = &action{metaData: metaData, timeout: timeout, instancesPool: sync.Pool{New: new}}
 }
 
 func RunProcessor(s unsafe.Pointer, n uintptr, p Processor, ctx *Context) (string, error) {
@@ -49,43 +71,64 @@ func RunProcessor(s unsafe.Pointer, n uintptr, p Processor, ctx *Context) (strin
 	return p.Run(ctx)
 }
 
-func RunAction(ctx *Context) (err error) {
+// CallAction 消化其他错误，只返回onFinish错误
+func CallAction(gctx context.Context, s *Session, request *Request) (err error) {
+	var act *action
+	var timeout int32 = ActionDefaultTimeout
+	hook := s.Server.Hook()
+
+	if act = actions[request.ActionName]; act != nil && act.timeout > 0 {
+		timeout = act.timeout
+	}
+	ctx := NewPlayContext(gctx, s, request, time.Duration(timeout)*time.Millisecond)
+
+	defer func() {
+		if panicInfo := recover(); panicInfo != nil {
+			ctx.err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
+		}
+		ctx.gcfunc()
+		err = hook.OnFinish(ctx)
+	}()
+
+	if ctx.err = hook.OnRequest(ctx); ctx.Err() == nil {
+		run(act, ctx)
+	}
+
+	if ctx.err = hook.OnResponse(ctx); ctx.Err() == nil {
+		if request.Respond {
+			ctx.err = s.Write(&ctx.Response)
+		}
+	}
+	return
+}
+
+func run(act *action, ctx *Context) {
 	var flag string
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
-			err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
+			ctx.err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
 		}
 	}()
-	pool, ok := actionPools[ctx.ActionInfo.Name]
-	if !ok {
-		return errors.New("can not find action:" + ctx.ActionInfo.Name)
+	if act == nil {
+		ctx.err = errors.New("can not find action:" + ctx.ActionInfo.Name)
+		return
 	}
 
-	ihandler := pool.Get()
+	ihandler := act.instancesPool.Get()
 	if ihandler == nil {
-		return errors.New("can not get action handle from pool:" + ctx.ActionInfo.Name)
-	}
-	defer pool.Put(ihandler)
-
-	// set context
-	if ctx.ActionInfo.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx.ctx, cancel = context.WithTimeout(ctx.ctx, ctx.ActionInfo.Timeout)
-		defer cancel()
+		ctx.err = errors.New("can not get action handle from pool:" + ctx.ActionInfo.Name)
+		return
+	} else {
+		defer act.instancesPool.Put(ihandler)
 	}
 
 	currentHandler := ihandler.(*ProcessorWrap)
 	for ok := true; ok; currentHandler, ok = currentHandler.next[flag] {
-		flag, err = currentHandler.run(currentHandler.p, ctx)
-		if ctx.ctx.Err() != nil {
-			if err != nil {
-				return err
-			}
-			return ctx.ctx.Err()
+		flag, ctx.err = currentHandler.run(currentHandler.p, ctx)
+		if ctx.Err() != nil {
+			return
 		}
-		if err != nil {
-			return err
-		}
+
 		if procOutputType, ok := reflect.TypeOf(currentHandler.p).Elem().FieldByName("Output"); ok {
 			procOutputVal := reflect.ValueOf(currentHandler.p).Elem().FieldByName("Output")
 			for i := 0; i < procOutputType.Type.NumField(); i++ {
@@ -99,5 +142,4 @@ func RunAction(ctx *Context) (err error) {
 			}
 		}
 	}
-	return
 }

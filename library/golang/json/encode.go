@@ -1241,6 +1241,9 @@ func typeFields(t reflect.Type) structFields {
 					continue
 				}
 				tag := sf.Tag.Get("key")
+				if tag == "" {
+					tag = sf.Tag.Get("json")
+				}
 				if tag == "-" {
 					continue
 				}

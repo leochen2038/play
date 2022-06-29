@@ -1,19 +1,21 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play"
 	"log"
 	"net"
 	"os"
 	"os/exec"
 	"os/signal"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/leochen2038/play"
+	"golang.org/x/sync/errgroup"
 )
 
 type runningInstance struct {
@@ -46,38 +48,45 @@ type filer interface {
 	File() (*os.File, error)
 }
 
-func Wait() {
-	instanceWaitGroup.Wait()
-}
+func Boot(is ...play.IServer) error {
+	var egr errgroup.Group
+	for _, i := range is {
+		var i = i
+		var err error
+		var listener net.Listener
+		var gracefulSocket = getGracefulSocket(i.Info().Name)
+		egr.Go(func() error {
+			if gracefulSocket > 0 {
+				if listener, err = net.FileListener(os.NewFile(gracefulSocket, "")); err != nil {
+					return err
+				}
+				if err = shouldKillParent(); err != nil {
+					log.Println("server failed to close parent:", err)
+					os.Exit(1)
+				}
+			} else if listener, err = net.Listen("tcp", i.Info().Address); err != nil {
+				return err
+			}
+			if _, ok := instances.Load(i.Info().Name); ok {
+				_ = listener.Close()
+				return errors.New("server name " + i.Info().Name + " is running")
+			}
 
-func Boot(i play.IServer) error {
-	var err error
-	var listener net.Listener
-	var gracefulSocket = getGracefulSocket(i.Info().Name)
-
-	if gracefulSocket > 0 {
-		if listener, err = net.FileListener(os.NewFile(gracefulSocket, "")); err != nil {
-			return err
-		}
-		if err = shouldKillParent(); err != nil {
-			log.Println("[http server] failed to close parent:", err)
-			os.Exit(1)
-		}
-	} else if listener, err = net.Listen("tcp", i.Info().Address); err != nil {
+			instanceWaitGroup.Add(1)
+			instances.Store(i.Info().Name, runningInstance{listener: listener, server: i})
+			go func() {
+				defer instanceWaitGroup.Done()
+				_ = i.Run(listener)
+			}()
+			return nil
+		})
+	}
+	if err := egr.Wait(); err != nil {
+		ShutdownAll()
 		return err
 	}
-	if _, ok := instances.Load(i.Info().Name); ok {
-		_ = listener.Close()
-		return errors.New("server name " + i.Info().Name + " is running")
-	}
 
-	instanceWaitGroup.Add(1)
-	instances.Store(i.Info().Name, runningInstance{listener: listener, server: i})
-	go func() {
-		defer instanceWaitGroup.Done()
-		_ = i.Run(listener)
-	}()
-
+	instanceWaitGroup.Wait()
 	return nil
 }
 
@@ -97,34 +106,14 @@ func Shutdown(name string) {
 	}
 }
 
-func doRequest(s *play.Session, request *play.Request) (err error) {
+// 返回callAction里的onFinish错误
+func doRequest(gctx context.Context, s *play.Session, request *play.Request) (err error) {
 	s.Server.Ctrl().AddTask()
-
 	defer func() {
 		s.Server.Ctrl().DoneTask()
-		if panicInfo := recover(); panicInfo != nil {
-			err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
-		}
 	}()
 
-	ctx := play.NewContextWithRequest(s, request)
-
-	hook := s.Server.Hook()
-	if hook.OnRequest(ctx); ctx.Err != nil {
-		goto RESPONSE
-	}
-
-	ctx.Err = play.RunAction(ctx)
-
-RESPONSE:
-	hook.OnResponse(ctx)
-	if request.Respond {
-		if err = s.Write(&ctx.Response); err != nil {
-			return
-		}
-	}
-	hook.OnFinish(ctx)
-	return
+	return play.CallAction(gctx, s, request)
 }
 
 func reload() (int, error) {

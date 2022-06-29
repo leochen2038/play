@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
@@ -70,13 +71,16 @@ func (i *sseInstance) accept(s *play.Session) {
 	var err error
 	var w = s.Conn.Http.ResponseWriter
 
-	i.hook.OnConnect(s, nil)
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
-			err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
+			fmt.Printf("panic: %v\n%v", panicInfo, string(debug.Stack()))
 		}
+	}()
+
+	defer func() {
 		i.hook.OnClose(s, err)
 	}()
+	i.hook.OnConnect(s, nil)
 
 	if _, ok := w.(http.Flusher); !ok {
 		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
@@ -96,7 +100,7 @@ func (i *sseInstance) accept(s *play.Session) {
 		return
 	}
 
-	if err = doRequest(s, request); err != nil {
+	if err = doRequest(context.Background(), s, request); err != nil {
 		return
 	}
 

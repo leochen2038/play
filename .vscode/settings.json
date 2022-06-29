@@ -1,0 +1,8 @@
+{
+    "go.inferGopath": false,
+    "commentTranslate.targetLanguage": "zh-CN",
+    "commentTranslate.source": "intellsmi.deepl-translate-deepl",
+    "go.toolsEnvVars": {
+        "GOPROXY": "https://goproxy.io"
+    }
+}
