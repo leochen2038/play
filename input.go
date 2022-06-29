@@ -1,102 +1,65 @@
 package play
 
-type Parser interface {
-	GetVal(key string) (val interface{}, err error)
-	Bind(obj interface{}) error
-}
+import (
+	"errors"
+	"reflect"
+	"strings"
+	"sync"
+
+	"github.com/leochen2038/play/codec/binder"
+)
 
 type Input struct {
-	parser interface{ Parser }
+	binder   binder.Binder
+	exValues sync.Map
 }
 
-func NewInput(parser interface{ Parser }) *Input {
-	return &Input{parser: parser}
+func NewInput(binder binder.Binder) Input {
+	return Input{binder: binder}
 }
 
-func (in *Input) Bind(obj interface{}) (err error) {
-	return in.parser.Bind(obj)
+func (input *Input) SetValue(key string, val interface{}) {
+	input.exValues.Store(key, val)
 }
 
-func (in *Input) Interface(key string) (interface{}, error) {
-	return in.parser.GetVal(key)
-}
-
-func (in Input) SliceString(key string) (list []string, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
+func (input *Input) Value(key string) interface{} {
+	if exValue, ok := input.exValues.Load(key); ok {
+		return exValue
+	} else {
+		return input.binder.Get(key)
 	}
-	return ParseSliceString(v)
 }
 
-func (in Input) SliceInterface(key string) (list []interface{}, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
-	}
-	return ParseSliceInterface(v)
-}
+func (input *Input) Bind(v reflect.Value) (err error) {
+	if v.CanSet() {
+		var tField reflect.StructField
+		var vField reflect.Value
+		var fieldCount = v.Type().NumField()
 
-func (in Input) MapInterface(key string) (list map[string]interface{}, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
-	}
-	return ParseMapInterface(v)
-}
+		for i := 0; i < fieldCount; i++ {
+			if vField, tField = v.Field(i), v.Type().Field(i); !vField.CanInterface() {
+				continue
+			}
 
-func (in Input) Bool(key string) (val bool, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
-	}
-	return ParseBool(v)
-}
+			key := tField.Tag.Get("key")
+			if key == "" {
+				key = tField.Name
+			}
+			for _, key := range strings.Split(key, ",") {
+				if exValue, ok := input.exValues.Load(key); ok {
+					if tField.Type.String() != reflect.TypeOf(exValue).String() {
+						return errors.New("input custom " + key + " type need " + tField.Type.String() + " but " + reflect.TypeOf(exValue).String() + " given")
+					}
+					vField.Set(reflect.ValueOf(exValue))
+					goto NEXT
+				}
+			}
 
-func (in Input) String(key string) (val string, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
+			if err = input.binder.Bind(vField, tField); err != nil {
+				return err
+			}
+		NEXT:
+		}
 	}
-	return ParseString(v)
-}
-
-func (in Input) Int(key string) (val int, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
-	}
-	return ParseInt(v)
-}
-
-func (in Input) Int8(key string) (val int8, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
-	}
-	return ParseInt8(v)
-}
-
-func (in Input) Int64(key string) (val int64, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
-	}
-	return ParseInt64(v)
-}
-
-func (in Input) Float32(key string) (val float32, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
-	}
-	return ParseFloat32(v)
-}
-
-func (in Input) Float64(key string) (val float64, err error) {
-	var v interface{}
-	if v, err = in.parser.GetVal(key); err != nil {
-		return
-	}
-	return ParseFloat64(v)
+	return
 }

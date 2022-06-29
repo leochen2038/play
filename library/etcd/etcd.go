@@ -3,7 +3,8 @@ package etcd
 import (
 	"context"
 	"errors"
-	"github.com/coreos/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
+
 	"log"
 	"time"
 )

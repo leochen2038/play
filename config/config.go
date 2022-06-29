@@ -1,14 +1,20 @@
 package config
 
-import "github.com/leochen2038/play"
+import (
+	"github.com/leochen2038/play"
+)
+
+type Parser interface {
+	GetVal(key string) (val interface{}, err error)
+}
 
 type config struct {
-	parser interface{ play.Parser }
+	parser Parser
 }
 
 var configInstance *config
 
-func InitConfig(parser interface{ play.Parser }) {
+func InitConfig(parser interface{ Parser }) {
 	configInstance = &config{parser: parser}
 }
 

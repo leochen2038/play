@@ -1,6 +1,9 @@
 package play
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 var ErrQueryEmptyResult = errors.New("empty result in query")
 
@@ -16,9 +19,10 @@ type Query struct {
 	DBName, Table string
 	Conditions    []Condition
 	Sets          map[string][]interface{}
-	Fields        map[string]bool
+	Fields        map[string]struct{}
 	Order         [][2]string
 	Limit         [2]int64
 	Group         []string
 	Router        string
+	Context       context.Context
 }

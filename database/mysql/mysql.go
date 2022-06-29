@@ -4,14 +4,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/config"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/config"
 )
 
 var dbconnects sync.Map
@@ -25,18 +26,25 @@ func getConnect(router string) (*sql.DB, error) {
 		return nil, fmt.Errorf("can not find mysql config")
 	}
 
-	connect, _ := dbconnects.Load(dest)
-	if connect == nil {
+	if connect, _ := dbconnects.Load(dest); connect == nil {
 		if dbconnect, err = sql.Open("mysql", dest); err != nil {
 			return nil, fmt.Errorf("can not find open mysql | %w", err)
 		}
 		if err = dbconnect.Ping(); err != nil {
 			return nil, fmt.Errorf("can not find ping mysql host | %w", err)
 		}
-		dbconnects.Store(dest, dbconnect)
-	}
 
-	return connect.(*sql.DB), nil
+		if connect, ok := dbconnects.LoadOrStore(dest, dbconnect); ok {
+			_ = dbconnect.Close()
+			return connect.(*sql.DB), nil
+		}
+
+		dbconnect.SetConnMaxLifetime(100)
+		dbconnect.SetMaxIdleConns(10)
+		return dbconnect, nil
+	} else {
+		return connect.(*sql.DB), nil
+	}
 }
 
 func GetList(dest interface{}, query *play.Query) (err error) {
@@ -491,7 +499,7 @@ func updatetext(query *play.Query) (string, []interface{}) {
 		}
 	}
 
-	if query.Fields["Fmtime"] && !find {
+	if _, ok := query.Fields["Fmtime"]; ok && !find {
 		fields = append(fields, "Fmtime = ?")
 		values = append(values, time.Now().Unix())
 	}
@@ -528,11 +536,10 @@ func Save(meta interface{}, query *play.Query) (id int64, err error) {
 
 	insert, values := intotext(meta)
 
-	res, err = conn.Exec("REPLACE INTO "+query.DBName+"."+query.Table+insert, values...)
-
-	if err == nil {
-		id, err = res.LastInsertId()
+	if res, err = conn.Exec("REPLACE INTO "+query.DBName+"."+query.Table+insert, values...); err == nil {
+		id, _ = res.LastInsertId()
 	}
+
 	return
 }
 

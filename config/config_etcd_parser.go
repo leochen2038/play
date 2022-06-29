@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/middleware/etcd"
 	"io/ioutil"
 	"os"
 	"strings"
+
+	"github.com/leochen2038/play/library/etcd"
 )
 
 type EtcdParser struct {
@@ -36,11 +36,7 @@ func (e *EtcdParser) GetVal(key string) (val interface{}, err error) {
 	return
 }
 
-func (e *EtcdParser) Bind(obj interface{}) error {
-	panic("EtcdParser no support Bind Method yet")
-}
-
-func NewEtcdParser(etcd *etcd.EtcdAgent, configKey string) (parser play.Parser, err error) {
+func NewEtcdParser(etcd *etcd.EtcdAgent, configKey string) (parser Parser, err error) {
 	var etcdParser EtcdParser
 	var dataByte []byte
 
