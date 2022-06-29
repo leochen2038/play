@@ -6,10 +6,11 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play"
 	"net"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/leochen2038/play"
 )
 
 type sseInstance struct {

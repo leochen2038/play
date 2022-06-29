@@ -2,7 +2,6 @@ package action
 
 import (
 	"fmt"
-	"github.com/leochen2038/play/goplay/reconst/env"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -10,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"unicode"
+
+	"github.com/leochen2038/play/goplay/reconst/env"
 )
 
 func genCallerCode(actions map[string]action) error {

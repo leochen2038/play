@@ -2,10 +2,11 @@ package client
 
 import (
 	"fmt"
-	"github.com/leochen2038/play"
 	"log"
 	"net"
 	"time"
+
+	"github.com/leochen2038/play"
 )
 
 var noDeadline time.Time

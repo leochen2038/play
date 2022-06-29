@@ -4,10 +4,11 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play/goplay/reconst/env"
 	"io/ioutil"
 	"os"
 	"strings"
+
+	"github.com/leochen2038/play/goplay/reconst/env"
 )
 
 func checkProcessorFile(name string) (err error) {

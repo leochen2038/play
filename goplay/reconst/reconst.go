@@ -4,10 +4,11 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play/goplay/reconst/action"
-	"github.com/leochen2038/play/goplay/reconst/meta"
 	"os"
 	"strings"
+
+	"github.com/leochen2038/play/goplay/reconst/action"
+	"github.com/leochen2038/play/goplay/reconst/meta"
 )
 
 func ReconstProject() (err error) {

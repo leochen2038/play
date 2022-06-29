@@ -3,10 +3,11 @@ package transport
 import (
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/library/golang/json"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/library/golang/json"
 )
 
 type SseTransport struct {

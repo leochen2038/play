@@ -2,13 +2,14 @@ package action
 
 import (
 	"fmt"
-	"github.com/leochen2038/play/goplay/reconst/env"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/leochen2038/play/goplay/reconst/env"
 )
 
 var registerCode string

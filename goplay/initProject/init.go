@@ -3,12 +3,13 @@ package initProject
 import (
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play/goplay/reconst/env"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/leochen2038/play/goplay/reconst/env"
 )
 
 func InitProject(upgrade bool) (err error) {

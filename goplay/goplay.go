@@ -4,12 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/leochen2038/play/goplay/initProject"
-	"github.com/leochen2038/play/goplay/reconst"
-	"github.com/leochen2038/play/goplay/reconst/env"
 	"os"
 	"runtime"
 	"strings"
+
+	"github.com/leochen2038/play/goplay/initProject"
+	"github.com/leochen2038/play/goplay/reconst"
+	"github.com/leochen2038/play/goplay/reconst/env"
 )
 
 var command string
