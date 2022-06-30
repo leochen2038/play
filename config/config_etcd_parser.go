@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/leochen2038/play/library/etcd"
+	"gitlab.youban.com/go-utils/play/library/etcd"
 )
 
 type EtcdParser struct {

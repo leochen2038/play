@@ -8,16 +8,16 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/leochen2038/play/goplay/initProject"
-	"github.com/leochen2038/play/goplay/reconst"
-	"github.com/leochen2038/play/goplay/reconst/env"
+	"gitlab.youban.com/go-utils/play/goplay/initProject"
+	"gitlab.youban.com/go-utils/play/goplay/reconst"
+	"gitlab.youban.com/go-utils/play/goplay/reconst/env"
 )
 
 var command string
 
 // 多包同名，可以在import进行引用别名
 func init() {
-	env.FrameworkName = "github.com/leochen2038/play"
+	env.FrameworkName = "gitlab.youban.com/go-utils/play"
 	env.FrameworkVer = "v0.6.26"
 
 	if len(os.Args) < 2 {
@@ -39,6 +39,7 @@ The commands are:
 	env.ProjectPath = os.Args[2]
 	env.GoVersion = runtime.Version()[2:]
 	env.WithoutModuleName = 0
+	env.ActionDefaultTimeout = "500"
 }
 
 func main() {

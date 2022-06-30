@@ -1,4 +1,4 @@
-package server
+package servers
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"runtime/debug"
 
 	"github.com/gorilla/websocket"
-	"github.com/leochen2038/play"
+	"gitlab.youban.com/go-utils/play"
 )
 
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
@@ -22,13 +22,13 @@ type wsInstance struct {
 	info      play.InstanceInfo
 	hook      play.IServerHook
 	ctrl      *play.InstanceCtrl
-	transport play.ITransport
+	transport play.IHandleTransport
 
 	tlsConfig  *tls.Config
 	httpServer http.Server
 }
 
-func NewWsInstance(name string, addr string, transport play.ITransport, hook play.IServerHook) (*wsInstance, error) {
+func NewWsInstance(name string, addr string, transport play.IHandleTransport, hook play.IServerHook) (*wsInstance, error) {
 	if transport == nil {
 		return nil, errors.New("ws instance transport must not be nil")
 	}
@@ -128,7 +128,7 @@ func (i *wsInstance) Info() play.InstanceInfo {
 	return i.info
 }
 
-func (i *wsInstance) Transport() play.ITransport {
+func (i *wsInstance) Transport() play.IHandleTransport {
 	return i.transport
 }
 

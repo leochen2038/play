@@ -1,10 +1,10 @@
-package transport
+package transports
 
 import (
 	"github.com/gorilla/websocket"
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/binder"
-	"github.com/leochen2038/play/library/golang/json"
+	"gitlab.youban.com/go-utils/play"
+	"gitlab.youban.com/go-utils/play/codec/binders"
+	"gitlab.youban.com/go-utils/play/library/golang/json"
 )
 
 type WsJsonTransport struct {
@@ -20,7 +20,7 @@ func (m *WsJsonTransport) Receive(c *play.Conn) (*play.Request, error) {
 	request.ActionName, request.Render = ParseHttpPath(c.Http.Request.URL.Path)
 
 	if len(c.Websocket.Message) > 0 {
-		request.InputBinder = binder.NewJsonBinder(c.Websocket.Message)
+		request.InputBinder = binders.NewJsonBinder(c.Websocket.Message)
 	} else {
 		request.InputBinder = ParseHttpInput(c.Http.Request, 4096)
 	}

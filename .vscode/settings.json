@@ -3,6 +3,7 @@
     "commentTranslate.targetLanguage": "zh-CN",
     "commentTranslate.source": "intellsmi.deepl-translate-deepl",
     "go.toolsEnvVars": {
-        "GOPROXY": "https://goproxy.io"
+        "GOPROXY": "https://proxy.golang.com.cn,direct",
+        "GO111MODULE": ""
     }
 }

@@ -13,7 +13,7 @@ type jsonBinder struct {
 	root gjson.Result
 }
 
-func NewJsonDecoder(data []byte) Binder {
+func NewJsonBinder(data []byte) Binder {
 	return &jsonBinder{root: gjson.GetBytes(data, "@this")}
 }
 

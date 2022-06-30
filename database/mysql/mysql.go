@@ -11,8 +11,8 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/config"
+	"gitlab.youban.com/go-utils/play"
+	"gitlab.youban.com/go-utils/play/config"
 )
 
 var dbconnects sync.Map

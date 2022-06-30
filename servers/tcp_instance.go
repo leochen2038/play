@@ -1,4 +1,4 @@
-package server
+package servers
 
 import (
 	"context"
@@ -7,17 +7,17 @@ import (
 	"net"
 	"runtime/debug"
 
-	"github.com/leochen2038/play"
+	"gitlab.youban.com/go-utils/play"
 )
 
 type TcpInstance struct {
 	info      play.InstanceInfo
 	hook      play.IServerHook
 	ctrl      *play.InstanceCtrl
-	transport play.ITransport
+	transport play.IHandleTransport
 }
 
-func NewTcpInstance(name string, addr string, transport play.ITransport, hook play.IServerHook) (*TcpInstance, error) {
+func NewTcpInstance(name string, addr string, transport play.IHandleTransport, hook play.IServerHook) (*TcpInstance, error) {
 	if transport == nil {
 		return nil, errors.New("tcp instance transport must not be nil")
 	}
@@ -85,7 +85,7 @@ func (i *TcpInstance) Hook() play.IServerHook {
 	return i.hook
 }
 
-func (i *TcpInstance) Transport() play.ITransport {
+func (i *TcpInstance) Transport() play.IHandleTransport {
 	return i.transport
 }
 

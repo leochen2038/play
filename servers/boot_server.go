@@ -1,4 +1,4 @@
-package server
+package servers
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/leochen2038/play"
+	"gitlab.youban.com/go-utils/play"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -48,7 +48,7 @@ type filer interface {
 	File() (*os.File, error)
 }
 
-func Boot(is ...play.IServer) error {
+func Bootstrap(is ...play.IServer) error {
 	var egr errgroup.Group
 	for _, i := range is {
 		var i = i

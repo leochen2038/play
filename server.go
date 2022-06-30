@@ -3,12 +3,11 @@ package play
 import (
 	"net"
 	"net/http"
-	"reflect"
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/leochen2038/play/codec/binder"
-	"github.com/leochen2038/play/codec/render"
+	"gitlab.youban.com/go-utils/play/codec/binders"
+	"gitlab.youban.com/go-utils/play/codec/renders"
 )
 
 type IServerHook interface {
@@ -24,19 +23,19 @@ type IServer interface {
 	Info() InstanceInfo
 	Ctrl() *InstanceCtrl
 	Hook() IServerHook
-	Transport() ITransport
+	Transport() IHandleTransport
 
 	Run(net.Listener) error
 	Close()
 }
 
-type Binder interface {
-	Bind(v reflect.Value) error
-	Get(key string) (interface{}, error)
-	Set(key string, val interface{})
-}
+// type Binder interface {
+// 	Bind(v reflect.Value) error
+// 	Get(key string) (interface{}, error)
+// 	Set(key string, val interface{})
+// }
 
-type ITransport interface {
+type IHandleTransport interface {
 	Receive(c *Conn) (*Request, error)
 	Send(c *Conn, res *Response) error
 }
@@ -88,15 +87,15 @@ type Request struct {
 	SpanId       []byte
 	Respond      bool
 	ActionName   string
-	InputBinder  binder.Binder
-	OutputRender render.Render
+	InputBinder  binders.Binder
+	OutputRender renders.Render
 }
 
 type Response struct {
-	ErrorCode    int
-	TagId        int
-	TraceId      string
-	SpanId       []byte
-	Template     string
-	OutputRender Output
+	ErrorCode int
+	TagId     int
+	TraceId   string
+	SpanId    []byte
+	Template  string
+	Output    Output
 }

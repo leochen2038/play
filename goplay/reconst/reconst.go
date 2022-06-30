@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/leochen2038/play/goplay/reconst/action"
-	"github.com/leochen2038/play/goplay/reconst/meta"
+	"gitlab.youban.com/go-utils/play/goplay/reconst/action"
+	"gitlab.youban.com/go-utils/play/goplay/reconst/meta"
 )
 
 func ReconstProject() (err error) {

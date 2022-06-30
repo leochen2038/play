@@ -1,4 +1,4 @@
-package server
+package servers
 
 import (
 	"crypto/rand"
@@ -9,14 +9,14 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/leochen2038/play"
+	"gitlab.youban.com/go-utils/play"
 )
 
 type httpInstance struct {
 	info      play.InstanceInfo
 	hook      play.IServerHook
 	ctrl      *play.InstanceCtrl
-	transport play.ITransport
+	transport play.IHandleTransport
 
 	tlsConfig  *tls.Config
 	httpServer http.Server
@@ -24,7 +24,7 @@ type httpInstance struct {
 	sse        *sseInstance
 }
 
-func NewHttpInstance(name string, addr string, transport play.ITransport, hook play.IServerHook) (*httpInstance, error) {
+func NewHttpInstance(name string, addr string, transport play.IHandleTransport, hook play.IServerHook) (*httpInstance, error) {
 	if transport == nil {
 		return nil, errors.New("tcp instance transport must not be nil")
 	}
@@ -55,7 +55,7 @@ func (i *httpInstance) Hook() play.IServerHook {
 	return i.hook
 }
 
-func (i *httpInstance) Transport() play.ITransport {
+func (i *httpInstance) Transport() play.IHandleTransport {
 	return i.transport
 }
 

@@ -8,10 +8,10 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/config"
-	"github.com/leochen2038/play/library/cache"
-	"github.com/leochen2038/play/library/etcd"
+	"gitlab.youban.com/go-utils/play"
+	"gitlab.youban.com/go-utils/play/config"
+	"gitlab.youban.com/go-utils/play/library/cache"
+	"gitlab.youban.com/go-utils/play/library/etcd"
 )
 
 var (

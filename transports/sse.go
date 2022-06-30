@@ -1,4 +1,4 @@
-package transport
+package transports
 
 import (
 	"errors"
@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/library/golang/json"
+	"gitlab.youban.com/go-utils/play"
+	"gitlab.youban.com/go-utils/play/library/golang/json"
 )
 
 type SseTransport struct {
@@ -36,8 +36,8 @@ func (p *SseTransport) Send(c *play.Conn, res *play.Response) error {
 		}
 	}()
 
-	if res.Render != "json" {
-		return errors.New("undefined " + res.Render + " sse response render")
+	if res.Output.RenderName() != "json" {
+		return errors.New("undefined " + res.Output.RenderName() + " sse response render")
 	}
 	if data, err = json.MarshalEscape(res.Output.All(), false, false); err != nil {
 		return err

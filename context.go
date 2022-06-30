@@ -41,7 +41,7 @@ type Context struct {
 	ServerName string
 	values     sync.Map
 	ActionInfo ActionInfo
-	Input      Binder
+	Input      Input
 	Response   Response
 	Session    *Session
 	Trace      *TraceContext
@@ -72,7 +72,7 @@ func NewPlayContext(parent context.Context, s *Session, request *Request, timeou
 
 	return &Context{
 		ActionInfo: action,
-		Input:      request.InputBinder,
+		Input:      NewInput(request.InputBinder),
 		Response:   response,
 		Trace:      &trace,
 		Session:    s,

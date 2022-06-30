@@ -52,7 +52,7 @@ type ProcessorWrap struct {
 	next map[string]*ProcessorWrap
 }
 
-func RegisterAction(name string, metaData map[string]string, timeout int32, new func() interface{}) {
+func RegisterAction(name string, metaData map[string]string, new func() interface{}, timeout int32) {
 	actions[name] = &action{metaData: metaData, timeout: timeout, instancesPool: sync.Pool{New: new}}
 }
 

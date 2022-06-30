@@ -6,3 +6,4 @@ var FrameworkName string
 var GoVersion string
 var FrameworkVer string
 var WithoutModuleName int
+var ActionDefaultTimeout string

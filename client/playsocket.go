@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/leochen2038/play"
+	"gitlab.youban.com/go-utils/play"
 )
 
 var noDeadline time.Time

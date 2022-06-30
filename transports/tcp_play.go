@@ -1,13 +1,13 @@
-package transport
+package transports
 
 import (
 	"errors"
 	"strconv"
 	"unsafe"
 
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/binder"
-	"github.com/leochen2038/play/library/golang/json"
+	"gitlab.youban.com/go-utils/play"
+	"gitlab.youban.com/go-utils/play/codec/binders"
+	"gitlab.youban.com/go-utils/play/library/golang/json"
 )
 
 // request  protocol v3
@@ -158,7 +158,7 @@ func readProtocolV2(buffer []byte, dataSize int, protocol *play.Request) error {
 
 	protocol.TraceId = string(buffer[17:49])
 	protocol.ActionName = string(buffer[49:actionEndIdx])
-	protocol.InputBinder = binder.NewJsonBinder(buffer[actionEndIdx:messageEndIdx])
+	protocol.InputBinder = binders.NewJsonBinder(buffer[actionEndIdx:messageEndIdx])
 
 	return nil
 }
@@ -187,7 +187,7 @@ func readProtocolV3(buffer []byte, dataSize int, protocol *play.Request) error {
 	}
 
 	protocol.ActionName = string(buffer[67:actionEndIdx])
-	protocol.InputBinder = binder.NewJsonBinder(buffer[actionEndIdx:dataSize])
+	protocol.InputBinder = binders.NewJsonBinder(buffer[actionEndIdx:dataSize])
 
 	return nil
 }

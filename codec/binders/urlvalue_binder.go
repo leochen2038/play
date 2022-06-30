@@ -25,7 +25,7 @@ func (b urlValueBinder) Get(key string) interface{} {
 }
 
 func (b urlValueBinder) Bind(v reflect.Value, s reflect.StructField) error {
-	return nil
+	return b.bindValue(v, s, "")
 }
 
 func (b urlValueBinder) bindValue(v reflect.Value, s reflect.StructField, preKey string) (err error) {

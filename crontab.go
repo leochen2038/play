@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/leochen2038/play/library/etcd"
 	"github.com/robfig/cron/v3"
+	"gitlab.youban.com/go-utils/play/library/etcd"
 )
 
 var (

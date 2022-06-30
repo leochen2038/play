@@ -1,11 +1,11 @@
 package play
 
 import (
-	"github.com/leochen2038/play/codec/render"
+	"gitlab.youban.com/go-utils/play/codec/renders"
 )
 
 type Output struct {
-	render render.Render
+	render renders.Render
 	data   map[string]interface{}
 }
 
@@ -36,6 +36,6 @@ func (o Output) RenderName() string {
 	return o.render.Name()
 }
 
-func (o *Output) SetRender(render render.Render) {
+func (o *Output) SetRender(render renders.Render) {
 	o.render = render
 }

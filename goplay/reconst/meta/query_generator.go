@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/leochen2038/play/goplay/reconst/env"
+	"gitlab.youban.com/go-utils/play/goplay/reconst/env"
 )
 
 type Meta struct {

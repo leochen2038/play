@@ -1,6 +1,6 @@
 package renders
 
-import "github.com/leochen2038/play/library/golang/json"
+import "gitlab.youban.com/go-utils/play/library/golang/json"
 
 var jRender = &jsonRender{}
 

@@ -1,4 +1,4 @@
-package transport
+package transports
 
 import (
 	"bytes"
@@ -7,20 +7,20 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/codec/binder"
+	"gitlab.youban.com/go-utils/play"
+	"gitlab.youban.com/go-utils/play/codec/binders"
 )
 
-type HttpTransport struct {
+type HttpHandleTransport struct {
 	inputMaxSize  int64
 	defaultRender string
 }
 
-func NewHttpTransport(inputMaxSize int64) *HttpTransport {
-	return &HttpTransport{inputMaxSize: inputMaxSize, defaultRender: "json"}
+func NewHttpHandleTransport(inputMaxSize int64) *HttpHandleTransport {
+	return &HttpHandleTransport{inputMaxSize: inputMaxSize, defaultRender: "json"}
 }
 
-func (p *HttpTransport) Receive(c *play.Conn) (*play.Request, error) {
+func (p *HttpHandleTransport) Receive(c *play.Conn) (*play.Request, error) {
 	var request = new(play.Request)
 
 	request.Respond = true
@@ -33,13 +33,13 @@ func (p *HttpTransport) Receive(c *play.Conn) (*play.Request, error) {
 	return request, nil
 }
 
-func (p *HttpTransport) Send(c *play.Conn, res *play.Response) (err error) {
+func (p *HttpHandleTransport) Send(c *play.Conn, res *play.Response) (err error) {
 
-	switch res.Render {
+	switch res.Output.RenderName() {
 	case "json":
 		err = HttpSendJson(c.Http.ResponseWriter, res.Output)
 	default:
-		err = errors.New("undefined " + res.Render + " http response render")
+		err = errors.New("undefined " + res.Output.RenderName() + " http response render")
 	}
 
 	return err
@@ -49,7 +49,7 @@ func HttpSendJson(w http.ResponseWriter, output play.Output) error {
 	var err error
 	var data []byte
 
-	if data, err = output.ToJsonRaw(); err != nil {
+	if data, err = output.Render(); err != nil {
 		return err
 	}
 
@@ -74,30 +74,30 @@ func ParseHttpPath(path string) (action string, render string) {
 	return
 }
 
-func ParseHttpInput(request *http.Request, formMaxMemory int64) play.Binder {
+func ParseHttpInput(request *http.Request, formMaxMemory int64) binders.Binder {
 	contentType := request.Header.Get("Content-Type")
 
 	if strings.Contains(contentType, "/json") {
 		raw, _ := ioutil.ReadAll(request.Body)
 		_ = request.Body.Close()
 		request.Body = ioutil.NopCloser(bytes.NewBuffer(raw))
-		return binder.NewJsonBinder(raw)
+		return binders.NewJsonBinder(raw)
 	}
 	if strings.Contains(contentType, "/bytes") {
 		raw, _ := ioutil.ReadAll(request.Body)
 		_ = request.Body.Close()
 		request.Body = ioutil.NopCloser(bytes.NewBuffer(raw))
-		return binder.NewBytesBinder(raw)
+		return binders.NewBytesBinder(raw)
 	}
 
 	if strings.Contains(contentType, "/x-www-form-urlencoded") {
 		_ = request.ParseForm()
-		return binder.NewUrlValueBinder(request.Form)
+		return binders.NewUrlValueBinder(request.Form)
 	}
 
 	if strings.Contains(contentType, "/form-data") {
 		_ = request.ParseMultipartForm(formMaxMemory)
-		return binder.NewUrlValueBinder(request.Form)
+		return binders.NewUrlValueBinder(request.Form)
 	}
-	return binder.NewUrlValueBinder(request.URL.Query())
+	return binders.NewUrlValueBinder(request.URL.Query())
 }

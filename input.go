@@ -6,15 +6,15 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/leochen2038/play/codec/binder"
+	"gitlab.youban.com/go-utils/play/codec/binders"
 )
 
 type Input struct {
-	binder   binder.Binder
+	binder   binders.Binder
 	exValues sync.Map
 }
 
-func NewInput(binder binder.Binder) Input {
+func NewInput(binder binders.Binder) Input {
 	return Input{binder: binder}
 }
 

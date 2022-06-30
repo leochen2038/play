@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/leochen2038/play/goplay/reconst/env"
+	"gitlab.youban.com/go-utils/play/goplay/reconst/env"
 )
 
 var registerCode string
@@ -26,9 +26,10 @@ func ReconstAction() (err error) {
 	registerCode += genRegisterCronCode(env.ProjectPath + "/crontab")
 	for _, action := range actions {
 		emptyAction = false
-		registerCode += "\tplay.RegisterAction(\"" + action.name + "\", " + "func()interface{}{return "
+		metaData := genActionMetaStruct(action.metaData)
+		registerCode += "\tplay.RegisterAction(\"" + action.name + "\", " + metaData + ", func()interface{}{return "
 		genNextProcessorCode(action.handlerList, &action)
-		registerCode = registerCode[:len(registerCode)-1] + "})\n"
+		registerCode = registerCode[:len(registerCode)-1] + "}," + env.ActionDefaultTimeout + ")\n"
 	}
 	registerCode += "}"
 
@@ -42,6 +43,15 @@ func ReconstAction() (err error) {
 	//}
 
 	return
+}
+
+func genActionMetaStruct(metaData map[string]string) string {
+	var metaStruct string = `map[string]string{`
+	for k, v := range metaData {
+		metaStruct += fmt.Sprintf("\"%s\":\"%s\",", k, v)
+	}
+	metaStruct = metaStruct[:len(metaStruct)-1] + "}"
+	return metaStruct
 }
 
 func genRegisterCronCode(path string) (registCode string) {

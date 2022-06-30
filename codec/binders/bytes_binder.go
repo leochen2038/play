@@ -5,22 +5,22 @@ import (
 	"reflect"
 )
 
-type bytesDecoder struct {
+type bytesBinder struct {
 	data []byte
 }
 
-func NewBytesDecoder(data []byte) Binder {
-	return &bytesDecoder{data: data}
+func NewBytesBinder(data []byte) Binder {
+	return &bytesBinder{data: data}
 }
 
-func (decoder *bytesDecoder) Get(key string) interface{} {
-	return decoder.data
+func (b *bytesBinder) Get(key string) interface{} {
+	return b.data
 }
 
-func (decoder *bytesDecoder) Bind(v reflect.Value, s reflect.StructField) error {
+func (b *bytesBinder) Bind(v reflect.Value, s reflect.StructField) error {
 	bind := s.Tag.Get("bind")
-	if (v.Type().String() == "[]int8" || v.Type().String() == "[]byte") && len(decoder.data) > 0 {
-		v.Set(reflect.ValueOf(decoder.data))
+	if (v.Type().String() == "[]int8" || v.Type().String() == "[]byte") && len(b.data) > 0 {
+		v.Set(reflect.ValueOf(b.data))
 	} else {
 		if bind == "required" {
 			var key string

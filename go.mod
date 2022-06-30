@@ -1,4 +1,4 @@
-module github.com/leochen2038/play
+module gitlab.youban.com/go-utils/play
 
 go 1.15
 

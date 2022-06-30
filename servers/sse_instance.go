@@ -1,4 +1,4 @@
-package server
+package servers
 
 import (
 	"context"
@@ -10,20 +10,20 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/leochen2038/play"
+	"gitlab.youban.com/go-utils/play"
 )
 
 type sseInstance struct {
 	info      play.InstanceInfo
 	hook      play.IServerHook
 	ctrl      *play.InstanceCtrl
-	transport play.ITransport
+	transport play.IHandleTransport
 
 	tlsConfig  *tls.Config
 	httpServer http.Server
 }
 
-func NewSSEInstance(name string, addr string, transport play.ITransport, hook play.IServerHook) (*sseInstance, error) {
+func NewSSEInstance(name string, addr string, transport play.IHandleTransport, hook play.IServerHook) (*sseInstance, error) {
 	if transport == nil {
 		return nil, errors.New("sse instance transport must not be nil")
 	}
@@ -129,7 +129,7 @@ func (i *sseInstance) Hook() play.IServerHook {
 	return i.hook
 }
 
-func (i *sseInstance) Transport() play.ITransport {
+func (i *sseInstance) Transport() play.IHandleTransport {
 	return i.transport
 }
 

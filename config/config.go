@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/leochen2038/play"
+	"gitlab.youban.com/go-utils/play"
 )
 
 type Parser interface {
