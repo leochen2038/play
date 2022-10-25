@@ -9,35 +9,30 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 
-	"gitlab.youban.com/go-utils/play"
+	"github.com/leochen2038/play"
 	"golang.org/x/sync/errgroup"
 )
 
 type runningInstance struct {
-	server   play.IServer
-	listener net.Listener
+	server      play.IServer
+	listener    net.Listener
+	udpListener net.PacketConn
 }
 
 var (
-	instanceWaitGroup sync.WaitGroup
-	instances         sync.Map
-	ppidkilled        bool
+	instances  sync.Map
+	runs       []string
+	ppidkilled bool
 )
 
 const (
 	envGraceful = "GRACEFUL"
-)
-
-const (
-	TypeHttp      = 1
-	TypeTcp       = 2
-	TypeSse       = 3
-	TypeWebsocket = 4
 )
 
 func init() {
@@ -48,42 +43,76 @@ type filer interface {
 	File() (*os.File, error)
 }
 
-func Bootstrap(is ...play.IServer) error {
+func Boot(is ...play.IServer) error {
+	var instanceWaitGroup sync.WaitGroup
 	var egr errgroup.Group
 	for _, i := range is {
-		var i = i
-		var err error
-		var listener net.Listener
-		var gracefulSocket = getGracefulSocket(i.Info().Name)
-		egr.Go(func() error {
-			if gracefulSocket > 0 {
-				if listener, err = net.FileListener(os.NewFile(gracefulSocket, "")); err != nil {
-					return err
+		if i != nil {
+			var i = i
+			var err error
+			var listener net.Listener
+			var udplistener net.PacketConn
+			var gracefulSocket = getGracefulSocket(i.Info().Name)
+			egr.Go(func() error {
+				switch i.Network() {
+				case "tcp":
+					if gracefulSocket > 0 {
+						if listener, err = net.FileListener(os.NewFile(gracefulSocket, "")); err != nil {
+							return err
+						}
+					} else {
+						if listener, err = net.Listen(i.Network(), i.Info().Address); err != nil {
+							return err
+						}
+					}
+				case "udp":
+					if gracefulSocket > 0 {
+						if udplistener, err = net.FilePacketConn(os.NewFile(gracefulSocket, "")); err != nil {
+							return err
+						}
+					} else {
+						if udplistener, err = net.ListenPacket(i.Network(), i.Info().Address); err != nil {
+							return err
+						}
+					}
+				default:
+					return errors.New("unsupported network")
 				}
-				if err = shouldKillParent(); err != nil {
-					log.Println("server failed to close parent:", err)
-					os.Exit(1)
-				}
-			} else if listener, err = net.Listen("tcp", i.Info().Address); err != nil {
-				return err
-			}
-			if _, ok := instances.Load(i.Info().Name); ok {
-				_ = listener.Close()
-				return errors.New("server name " + i.Info().Name + " is running")
-			}
 
-			instanceWaitGroup.Add(1)
-			instances.Store(i.Info().Name, runningInstance{listener: listener, server: i})
-			go func() {
-				defer instanceWaitGroup.Done()
-				_ = i.Run(listener)
-			}()
-			return nil
-		})
+				if _, ok := instances.Load(i.Info().Name); ok {
+					if listener != nil {
+						_ = listener.Close()
+					}
+					if udplistener != nil {
+						_ = udplistener.Close()
+					}
+					return errors.New("server name " + i.Info().Name + " is running")
+				}
+
+				instanceWaitGroup.Add(1)
+				instances.Store(i.Info().Name, runningInstance{listener: listener, udpListener: udplistener, server: i})
+				runs = append(runs, i.Info().Name)
+				go func() {
+					defer instanceWaitGroup.Done()
+					_ = i.Run(listener, udplistener)
+				}()
+				i.Hook().OnBoot(i)
+				return nil
+			})
+		}
 	}
 	if err := egr.Wait(); err != nil {
-		ShutdownAll()
+		for _, i := range is {
+			if i != nil {
+				Shutdown(i.Info().Name)
+			}
+		}
 		return err
+	}
+	if os.Getenv(envGraceful) != "" {
+		if err := shouldKillParent(); err != nil {
+			os.Exit(1)
+		}
 	}
 
 	instanceWaitGroup.Wait()
@@ -91,18 +120,29 @@ func Bootstrap(is ...play.IServer) error {
 }
 
 func ShutdownAll() {
-	instances.Range(func(key, value interface{}) bool {
-		run := value.(runningInstance)
-		Shutdown(run.server.Info().Name)
-		return true
-	})
+	for _, v := range runs {
+		Shutdown(v)
+	}
 }
 
 func Shutdown(name string) {
 	if v, ok := instances.Load(name); ok {
 		instances.Delete(name)
-		v.(runningInstance).server.Close()
-		_ = v.(runningInstance).listener.Close()
+		i := v.(runningInstance)
+
+		defer func() {
+			i.server.Close()
+			if i.listener != nil {
+				_ = i.listener.Close()
+			}
+			if i.udpListener != nil {
+				_ = i.udpListener.Close()
+			}
+			if panicInfo := recover(); panicInfo != nil {
+				fmt.Printf("panic: %v\n%v", panicInfo, string(debug.Stack()))
+			}
+		}()
+		i.server.Hook().OnShutdown(i.server)
 	}
 }
 
@@ -130,8 +170,13 @@ func reload() (int, error) {
 
 	var socketId = 0
 	instances.Range(func(key, value interface{}) bool {
+		var socket *os.File
 		run := value.(runningInstance)
-		socket, _ := run.listener.(filer).File()
+		if run.listener != nil {
+			socket, _ = run.listener.(filer).File()
+		} else if run.udpListener != nil {
+			socket, _ = run.udpListener.(filer).File()
+		}
 		sockes = append(sockes, socket)
 		tags = append(tags, key.(string)+":"+strconv.Itoa(socketId))
 		socketId++
@@ -175,10 +220,13 @@ func signalHandler() {
 		case syscall.SIGINT, syscall.SIGTERM:
 			signal.Stop(ch)
 			ShutdownAll()
+			os.Exit(0)
 		case syscall.SIGUSR2:
 			if _, err := reload(); err != nil {
 				fmt.Println("reload error:", err.Error())
 			}
+		default:
+			fmt.Println("unknown signal")
 		}
 	}
 }
@@ -204,5 +252,37 @@ func getGracefulSocket(name string) (id uintptr) {
 			}
 		}
 	}
+	return
+}
+
+type defaultHook struct {
+}
+
+func (h defaultHook) OnBoot(server play.IServer) {
+}
+
+func (h defaultHook) OnShutdown(server play.IServer) {
+}
+
+func (h defaultHook) OnConnect(sess *play.Session, err error) {
+	// TODO
+}
+
+func (h defaultHook) OnClose(sess *play.Session, err error) {
+	// TODO
+}
+
+func (h defaultHook) OnRequest(ctx *play.Context) (err error) {
+	// TODO
+	return
+}
+
+func (h defaultHook) OnResponse(ctx *play.Context) (err error) {
+	// TODO
+	return
+}
+
+func (h defaultHook) OnFinish(ctx *play.Context) (err error) {
+	// TODO
 	return
 }

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"gitlab.youban.com/go-utils/play/library/etcd"
+	"github.com/leochen2038/play/utils/etcd"
 )
 
 type cacheNode struct {

@@ -7,11 +7,17 @@ import (
 	"os"
 	"strings"
 
-	"gitlab.youban.com/go-utils/play/goplay/reconst/action"
-	"gitlab.youban.com/go-utils/play/goplay/reconst/meta"
+	"github.com/leochen2038/play/goplay/env"
+	"github.com/leochen2038/play/goplay/reconst/action"
+	"github.com/leochen2038/play/goplay/reconst/meta"
 )
 
 func ReconstProject() (err error) {
+	module, err := parseModuleName(os.Args[2])
+	if err != nil {
+		fmt.Println(err)
+	}
+	env.ModuleName = module
 	if err = meta.MetaGenerator(); err != nil {
 		return
 	}

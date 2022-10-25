@@ -6,37 +6,60 @@ import (
 	"fmt"
 	"reflect"
 	"runtime/debug"
+	"sort"
 	"sync"
 	"time"
 	"unsafe"
 )
 
-type action struct {
+type Action struct {
+	name          string
 	subsidiary    string
 	metaData      map[string]string
-	timeout       int32
+	timeout       time.Duration
 	instancesPool sync.Pool
 	newHandle     func() interface{}
+	input         map[string]ActionField
+	output        map[string]ActionField
 }
 
-func (act action) MetaData() map[string]string {
+type ActionField struct {
+	Field      string
+	Typ        string
+	OriginType string
+	Desc       string
+	Required   bool
+	Default    interface{}
+	Child      map[string]ActionField
+}
+
+func (act *Action) Name() string {
+	return act.name
+}
+func (act *Action) MetaData() map[string]string {
 	return act.metaData
 }
-func (act action) Timeout() int32 {
+func (act *Action) Timeout() time.Duration {
 	return act.timeout
 }
-func (act action) Instance() *ProcessorWrap {
+func (act *Action) Instance() *ProcessorWrap {
 	return act.newHandle().(*ProcessorWrap)
 }
+func (act *Action) Input() map[string]ActionField {
+	return act.input
+}
+func (act *Action) Output() map[string]ActionField {
+	return act.output
+}
 
-var ActionDefaultTimeout int32 = 500
-var actions = make(map[string]*action, 32)
+var ActionDefaultTimeout time.Duration = 500 * time.Millisecond
+var actions = make(map[string]*Action, 32)
 
 type Processor interface {
 	Run(ctx *Context) (string, error)
 }
 
-func SetActionTimeout(name string, timeout int32) {
+func SetActionTimeout(name string, timeout time.Duration) {
 	if v, ok := actions[name]; ok {
 		v.timeout = timeout
 	}
@@ -52,8 +75,15 @@ type ProcessorWrap struct {
 	next map[string]*ProcessorWrap
 }
 
-func RegisterAction(name string, metaData map[string]string, new func() interface{}, timeout int32) {
-	actions[name] = &action{metaData: metaData, timeout: timeout, instancesPool: sync.Pool{New: new}}
+func RegisterAction(name string, metaData map[string]string, new func() interface{}) {
+	actions[name] = &Action{
+		name:          name,
+		metaData:      metaData,
+		instancesPool: sync.Pool{New: new},
+		newHandle:     new,
+		input:         parseParameter(new().(*ProcessorWrap), "Input"),
+		output:        parseParameter(new().(*ProcessorWrap), "Output"),
+	}
 }
 
 func RunProcessor(s unsafe.Pointer, n uintptr, p Processor, ctx *Context) (string, error) {
@@ -73,36 +103,40 @@ func RunProcessor(s unsafe.Pointer, n uintptr, p Processor, ctx *Context) (strin
 
 // CallAction 消化其他错误，只返回onFinish错误
 func CallAction(gctx context.Context, s *Session, request *Request) (err error) {
-	var act *action
-	var timeout int32 = ActionDefaultTimeout
+	var act *Action
+	var timeout time.Duration = ActionDefaultTimeout
 	hook := s.Server.Hook()
 
 	if act = actions[request.ActionName]; act != nil && act.timeout > 0 {
 		timeout = act.timeout
 	}
-	ctx := NewPlayContext(gctx, s, request, time.Duration(timeout)*time.Millisecond)
+	ctx := NewPlayContext(gctx, s, request, timeout)
 
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
 			ctx.err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
 		}
-		ctx.gcfunc()
 		err = hook.OnFinish(ctx)
+		ctx.gcfunc()
 	}()
 
 	if ctx.err = hook.OnRequest(ctx); ctx.Err() == nil {
 		run(act, ctx)
 	}
+	if e := hook.OnResponse(ctx); e != nil {
+		ctx.err = e
+	}
 
-	if ctx.err = hook.OnResponse(ctx); ctx.Err() == nil {
-		if request.Respond {
-			ctx.err = s.Write(&ctx.Response)
+	if !request.NonRespond {
+		ctx.Response.Error = ctx.err
+		if e := s.Write(&ctx.Response); e != nil {
+			ctx.err = e
 		}
 	}
 	return
 }
 
-func run(act *action, ctx *Context) {
+func run(act *Action, ctx *Context) {
 	var flag string
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
@@ -132,14 +166,135 @@ func run(act *action, ctx *Context) {
 		if procOutputType, ok := reflect.TypeOf(currentHandler.p).Elem().FieldByName("Output"); ok {
 			procOutputVal := reflect.ValueOf(currentHandler.p).Elem().FieldByName("Output")
 			for i := 0; i < procOutputType.Type.NumField(); i++ {
-				structType := procOutputType.Type.Field(i)
-				structValue := procOutputVal.Field(i)
-				structKey := structType.Tag.Get("key")
-				if structKey == "" {
-					structKey = structType.Name
+				if structValue := procOutputVal.Field(i); structValue.CanSet() {
+					structType := procOutputType.Type.Field(i)
+					structKey := structType.Tag.Get("key")
+					if structKey == "" {
+						structKey = structType.Name
+					}
+					ctx.Response.Output.Set(structKey, structValue.Interface())
 				}
-				ctx.Response.Output.Set(structKey, structValue.Interface())
 			}
 		}
 	}
+}
+
+func GetAction(name string) *Action {
+	return actions[name]
+}
+
+func WalkAction(DoTask func(action *Action) error) error {
+	var names []string
+	for name := range actions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		if err := DoTask(actions[name]); err != nil {
+			fmt.Println("DoTask error:", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func parseParameter(handle *ProcessorWrap, field string) map[string]ActionField {
+	value := reflect.ValueOf(handle.p).Elem().FieldByName(field)
+	fields := parserField(value)
+
+	var nextFields = make([]map[string]ActionField, 0)
+	for _, next := range handle.next {
+		value = reflect.ValueOf(next.p).Elem().FieldByName(field)
+		nextFields = append(nextFields, parserField(value))
+	}
+
+	for _, nFields := range nextFields {
+		for k, f := range nFields {
+			if nextAllFind(k, nextFields) && (field == "Output" || f.Required) {
+				f.Required = true
+			} else {
+				f.Required = false
+			}
+			changeRequired(&f, f.Required)
+			fields[k] = f
+		}
+	}
+
+	return fields
+}
+
+func changeRequired(field *ActionField, required bool) {
+	for name, child := range field.Child {
+		f := field.Child[name]
+		f.Required = required
+		field.Child[name] = f
+		changeRequired(&child, required)
+	}
+}
+
+func nextAllFind(fieldName string, nextFields []map[string]ActionField) bool {
+	for _, next := range nextFields {
+		if _, ok := next[fieldName]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func parserField(value reflect.Value) map[string]ActionField {
+	if !value.IsValid() {
+		return nil
+	}
+
+	fields := make(map[string]ActionField)
+
+	for i := 0; i < value.NumField(); i++ {
+		field := ActionField{}
+
+		structType := value.Type().Field(i)
+		structKey := structType.Tag.Get("key")
+		structNote := structType.Tag.Get("note")
+		structRequire := structType.Tag.Get("required")
+		structDefault := structType.Tag.Get("default")
+		if len(structKey) == 0 {
+			structKey = structType.Name
+		}
+
+		field.Field = structKey
+		field.Typ = structType.Type.String()
+		field.OriginType = structType.Type.String()
+		field.Desc = structNote
+		field.Required = structRequire == "true"
+		field.Default = structDefault
+
+		switch structType.Type.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+			reflect.Float32, reflect.Float64, reflect.String:
+
+			fields[field.Field] = field
+		case reflect.Array, reflect.Slice:
+			elemType := reflect.New(structType.Type.Elem())
+			elemValue := reflect.Indirect(elemType)
+
+			if elemValue.Type().Kind() == reflect.Struct {
+				field.Typ = "[]object"
+				field.Child = parserField(elemValue)
+			}
+
+			fields[field.Field] = field
+		case reflect.Map:
+			field.Typ = "map"
+
+			fields[field.Field] = field
+		case reflect.Struct:
+			field.Child = parserField(value.Field(i))
+			field.Typ = "object"
+
+			fields[field.Field] = field
+		}
+	}
+
+	return fields
 }

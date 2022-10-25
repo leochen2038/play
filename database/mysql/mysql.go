@@ -11,8 +11,8 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"gitlab.youban.com/go-utils/play"
-	"gitlab.youban.com/go-utils/play/config"
+	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/database"
 )
 
 var dbconnects sync.Map
@@ -22,16 +22,16 @@ func getConnect(router string) (*sql.DB, error) {
 	var dest string
 	var dbconnect *sql.DB
 
-	if dest, err = config.String(router); err != nil {
-		return nil, fmt.Errorf("can not find mysql config")
+	if dest = database.GetDest(router); dest == "" {
+		return nil, fmt.Errorf("can not find mysql router:" + router)
 	}
 
 	if connect, _ := dbconnects.Load(dest); connect == nil {
 		if dbconnect, err = sql.Open("mysql", dest); err != nil {
-			return nil, fmt.Errorf("can not find open mysql | %w", err)
+			return nil, fmt.Errorf("can not find open mysql, %w", err)
 		}
 		if err = dbconnect.Ping(); err != nil {
-			return nil, fmt.Errorf("can not find ping mysql host | %w", err)
+			return nil, fmt.Errorf("can not find ping mysql host: %s , %w", dest, err)
 		}
 
 		if connect, ok := dbconnects.LoadOrStore(dest, dbconnect); ok {
@@ -67,6 +67,16 @@ func GetList(dest interface{}, query *play.Query) (err error) {
 	err = scanAll(rows, dest)
 	return
 }
+
+// func Statement(dest interface{}, query *play.Query) string {
+// 	fields := fieldstext(dest)
+// 	where, values := condtext(query)
+// 	statement := "SELECT " + fields + " FROM " + query.DBName + "." + query.Table + where
+// 	for k, v := range values {
+// 		statement = strings.Replace(statement, "?"+strconv.Itoa(k), fmt.Sprintf("%v", v), 1)
+// 	}
+// 	return statement
+// }
 
 func QueryMap(router, sqlStr string, args ...interface{}) (result []map[string]interface{}, err error) {
 	var conn *sql.DB
@@ -113,6 +123,7 @@ func GetOne(dest interface{}, query *play.Query) (err error) {
 	where, values := condtext(query)
 
 	rows, err = conn.Query("SELECT "+fields+" FROM "+query.DBName+"."+query.Table+where, values...)
+
 	if err != nil {
 		return
 	}
@@ -476,7 +487,7 @@ func Update(query *play.Query) (modcount int64, err error) {
 	for _, v := range value {
 		values = append(values, v)
 	}
-
+	fmt.Println("UPDATE "+query.DBName+"."+query.Table+update+where, values)
 	res, err = conn.Exec("UPDATE "+query.DBName+"."+query.Table+update+where, values...)
 	if err != nil {
 		return
@@ -492,8 +503,18 @@ func updatetext(query *play.Query) (string, []interface{}) {
 	fields := make([]string, 0, len(query.Sets)+1)
 	find := false
 	for field, v := range query.Sets {
-		fields = append(fields, field+" = ?")
-		values = append(values, v[0])
+		if len(v) == 2 {
+			if v[1] == "@+" {
+				fields = append(fields, field+" = "+field+" + ?")
+				values = append(values, v[0])
+			} else if v[1] == "@-" {
+				fields = append(fields, field+" = "+field+" - ?")
+				values = append(values, v[0])
+			}
+		} else {
+			fields = append(fields, field+" = ?")
+			values = append(values, v[0])
+		}
 		if field == "Fmtime" {
 			find = true
 		}

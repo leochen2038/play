@@ -10,19 +10,19 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-type protto3Render struct {
+type protobufRender struct {
 	descriptor protoreflect.MessageDescriptor
 }
 
-func GetProtto3Render(descriptor protoreflect.MessageDescriptor) Render {
-	return &protto3Render{descriptor: descriptor}
+func GetRenderOfProtobuf(descriptor protoreflect.MessageDescriptor) Render {
+	return &protobufRender{descriptor: descriptor}
 }
 
-func (r protto3Render) Name() string {
-	return "proto3"
+func (r protobufRender) Name() string {
+	return "protobuf"
 }
 
-func (r protto3Render) Render(data map[string]interface{}) ([]byte, error) {
+func (r protobufRender) Render(data map[string]interface{}) ([]byte, error) {
 	if message, err := _toProtobuf(data, r.descriptor); err != nil {
 		return nil, err
 	} else {

@@ -10,27 +10,28 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"gitlab.youban.com/go-utils/play"
+	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/packers"
 )
 
 type sseInstance struct {
-	info      play.InstanceInfo
-	hook      play.IServerHook
-	ctrl      *play.InstanceCtrl
-	transport play.IHandleTransport
+	info   play.InstanceInfo
+	hook   play.IServerHook
+	ctrl   *play.InstanceCtrl
+	packer play.IPacker
 
 	tlsConfig  *tls.Config
 	httpServer http.Server
 }
 
-func NewSSEInstance(name string, addr string, transport play.IHandleTransport, hook play.IServerHook) (*sseInstance, error) {
-	if transport == nil {
-		return nil, errors.New("sse instance transport must not be nil")
+func NewSSEInstance(name string, addr string, hook play.IServerHook, packer play.IPacker) *sseInstance {
+	if packer == nil {
+		packer = packers.NewJsonPackert()
 	}
 	if hook == nil {
-		return nil, errors.New("sse instance server hook must not be nil")
+		hook = defaultHook{}
 	}
-	return &sseInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: TypeSse}, transport: transport, hook: hook, ctrl: new(play.InstanceCtrl)}, nil
+	return &sseInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: play.SERVER_TYPE_SSE}, packer: packer, hook: hook, ctrl: new(play.InstanceCtrl)}
 }
 
 func (i *sseInstance) WithCertificate(cert tls.Certificate) *sseInstance {
@@ -44,7 +45,7 @@ func (i *sseInstance) WithCertificate(cert tls.Certificate) *sseInstance {
 
 func (i *sseInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
-	var sess = play.NewSession(r.Context(), nil, i)
+	var sess = play.NewSession(r.Context(), i)
 
 	defer func() {
 		recover()
@@ -55,7 +56,6 @@ func (i *sseInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess.Conn = new(play.Conn)
 	sess.Conn.Http.Request, sess.Conn.Http.ResponseWriter = r, w
 	i.accept(sess)
 }
@@ -96,7 +96,7 @@ func (i *sseInstance) accept(s *play.Session) {
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	request, err := i.transport.Receive(s.Conn)
+	request, err := i.packer.Receive(s.Conn)
 	if err != nil {
 		return
 	}
@@ -108,7 +108,7 @@ func (i *sseInstance) accept(s *play.Session) {
 	<-s.Context().Done()
 }
 
-func (i *sseInstance) Run(listener net.Listener) error {
+func (i *sseInstance) Run(listener net.Listener, udplistener net.PacketConn) error {
 	i.httpServer.Handler = i
 	if i.tlsConfig != nil {
 		listener = tls.NewListener(listener, i.tlsConfig)
@@ -129,10 +129,19 @@ func (i *sseInstance) Hook() play.IServerHook {
 	return i.hook
 }
 
-func (i *sseInstance) Transport() play.IHandleTransport {
-	return i.transport
+func (i *sseInstance) Packer() play.IPacker {
+	return i.packer
+}
+
+func (i *sseInstance) Transport(conn *play.Conn, data []byte) error {
+	conn.Http.ResponseWriter.(http.Flusher).Flush()
+	return nil
 }
 
 func (i *sseInstance) Ctrl() *play.InstanceCtrl {
 	return i.ctrl
+}
+
+func (i *sseInstance) Network() string {
+	return "tcp"
 }

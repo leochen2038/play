@@ -2,6 +2,8 @@ package play
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -14,9 +16,9 @@ type Session struct {
 	ctxCancel context.CancelFunc
 }
 
-func NewSession(cxt context.Context, c *Conn, server IServer) *Session {
+func NewSession(cxt context.Context, server IServer) *Session {
 	sess := &Session{
-		Conn:   c,
+		Conn:   &Conn{Type: server.Info().Type},
 		SessId: uuid.New().String(),
 		Server: server,
 	}
@@ -26,14 +28,20 @@ func NewSession(cxt context.Context, c *Conn, server IServer) *Session {
 
 func (s *Session) Write(res *Response) (err error) {
 	if res != nil {
-		if err = s.Server.Transport().Send(s.Conn, res); err != nil {
-			s.ctxCancel()
+		var data []byte
+		if data, err = s.Server.Packer().Pack(s.Conn, res); err == nil && len(data) > 0 {
+			err = s.Server.Transport(s.Conn, data)
 		}
+	}
+
+	if err != nil {
+		s.ctxCancel()
 	}
 	return err
 }
 
 func (s *Session) Close() {
+	fmt.Println("session close")
 	s.ctxCancel()
 }
 

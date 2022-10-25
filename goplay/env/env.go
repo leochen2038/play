@@ -7,3 +7,6 @@ var GoVersion string
 var FrameworkVer string
 var WithoutModuleName int
 var ActionDefaultTimeout string
+var InitFileName string
+var GenFileDir string
+var GenFileName string

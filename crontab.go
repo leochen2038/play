@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/leochen2038/play/utils/etcd"
 	"github.com/robfig/cron/v3"
-	"gitlab.youban.com/go-utils/play/library/etcd"
 )
 
 var (
@@ -48,7 +48,7 @@ func RegisterCronJob(name string, new func() CronJob) {
 }
 
 func CronStop() {
-	_ = <-cronRunner.Stop().Done()
+	<-cronRunner.Stop().Done()
 }
 
 func CronStartWithEtcd(etcd *etcd.EtcdAgent, key string, tryLocalFile string) {
@@ -104,13 +104,11 @@ func cronWatchFileChange(filename string, refashTickTime time.Duration) {
 	var refashTicker = time.NewTicker(refashTickTime * time.Second)
 
 	for {
-		select {
-		case <-refashTicker.C:
-			if fileinfo, err = os.Stat(filename); err == nil && fileinfo.ModTime().Unix() > cronLastFileModTime {
-				cronLastFileModTime = fileinfo.ModTime().Unix()
-				if data, err := ioutil.ReadFile(filename); err == nil {
-					cronUpdate(data)
-				}
+		<-refashTicker.C
+		if fileinfo, err = os.Stat(filename); err == nil && fileinfo.ModTime().Unix() > cronLastFileModTime {
+			cronLastFileModTime = fileinfo.ModTime().Unix()
+			if data, err := ioutil.ReadFile(filename); err == nil {
+				cronUpdate(data)
 			}
 		}
 	}

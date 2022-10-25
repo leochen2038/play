@@ -8,10 +8,10 @@ import (
 	"net/url"
 	"os"
 
-	"gitlab.youban.com/go-utils/play"
-	"gitlab.youban.com/go-utils/play/config"
-	"gitlab.youban.com/go-utils/play/library/cache"
-	"gitlab.youban.com/go-utils/play/library/etcd"
+	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/config"
+	"github.com/leochen2038/play/utils/cache"
+	"github.com/leochen2038/play/utils/etcd"
 )
 
 var (
@@ -71,7 +71,7 @@ func EtcdWithArgs(configKey, runningKey, crontabKey string, endpoints []string) 
 	etcdAgent.StartKeepAlive(runningKey, 3, func() (newVal string, isChange bool, err error) {
 		var version string
 		version, _ = config.String("version")
-		if version != lastConfigVer {
+		if version != lastConfigVer || etcd.IsReconnect() {
 			isChange = true
 			lastConfigVer = version
 			newVal = etcdRunningStatus(lastConfigVer, buildId, intranetIp, exePath, socketListen, httpListen, os.Getpid())

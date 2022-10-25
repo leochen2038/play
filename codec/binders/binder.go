@@ -16,6 +16,7 @@ var (
 )
 
 type Binder interface {
+	Name() string
 	Bind(v reflect.Value, s reflect.StructField) error
 	Get(key string) interface{}
 }
@@ -41,7 +42,7 @@ func parseSliceKey(k string, c string) (string, error) {
 
 func appendElem(vField reflect.Value, tField reflect.StructField, str string, gValue *gjson.Result) (reflect.Value, error) {
 	if regexPattern := tField.Tag.Get("regex"); regexPattern != "" {
-		if match, _ := regexp.MatchString(regexPattern, str); match == false {
+		if match, _ := regexp.MatchString(regexPattern, str); !match {
 			return vField, errors.New("value is mismatch")
 		}
 	}
@@ -54,28 +55,9 @@ func appendElem(vField reflect.Value, tField reflect.StructField, str string, gV
 	return vField, nil
 }
 
-func setValWithGjson(vField reflect.Value, tField reflect.StructField, gValue gjson.Result) error {
-	var val interface{}
-	var err error
-
-	if err = checkRegex(tField, gValue.String()); err != nil {
-		return err
-	}
-
-	if tStr := strings.Trim(tField.Type.String(), "[]"); tStr == "interface {}" {
-		val = gValue.Value()
-	} else {
-		if val, err = parseInterface(tStr, gValue.String(), tField); err != nil {
-			return err
-		}
-	}
-	vField.Set(reflect.ValueOf(val))
-	return nil
-}
-
 func checkRegex(tField reflect.StructField, str string) error {
 	if regexPattern := tField.Tag.Get("regex"); regexPattern != "" {
-		if match, _ := regexp.MatchString(regexPattern, str); match == false {
+		if match, _ := regexp.MatchString(regexPattern, str); !match {
 			return errors.New("value is mismatch")
 		}
 	}

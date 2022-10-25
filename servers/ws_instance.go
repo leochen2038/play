@@ -11,7 +11,8 @@ import (
 	"runtime/debug"
 
 	"github.com/gorilla/websocket"
-	"gitlab.youban.com/go-utils/play"
+	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/packers"
 )
 
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
@@ -19,29 +20,29 @@ var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
 }}
 
 type wsInstance struct {
-	info      play.InstanceInfo
-	hook      play.IServerHook
-	ctrl      *play.InstanceCtrl
-	transport play.IHandleTransport
+	info   play.InstanceInfo
+	hook   play.IServerHook
+	ctrl   *play.InstanceCtrl
+	packer play.IPacker
 
 	tlsConfig  *tls.Config
 	httpServer http.Server
 }
 
-func NewWsInstance(name string, addr string, transport play.IHandleTransport, hook play.IServerHook) (*wsInstance, error) {
-	if transport == nil {
-		return nil, errors.New("ws instance transport must not be nil")
+func NewWsInstance(name string, addr string, hook play.IServerHook, packer play.IPacker) *wsInstance {
+	if packer == nil {
+		packer = packers.NewJsonPackert()
 	}
 	if hook == nil {
-		return nil, errors.New("ws instance hook must not be nil")
+		hook = defaultHook{}
 	}
-	return &wsInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: TypeWebsocket}, transport: transport, hook: hook, ctrl: new(play.InstanceCtrl)}, nil
+	return &wsInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: play.SERVER_TYPE_WS}, packer: packer, hook: hook, ctrl: new(play.InstanceCtrl)}
 }
 
 func (i *wsInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var conn *websocket.Conn
-	var sess = play.NewSession(r.Context(), nil, i)
+	var sess = play.NewSession(r.Context(), i)
 
 	defer func() {
 		recover()
@@ -52,7 +53,6 @@ func (i *wsInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess.Conn = new(play.Conn)
 	sess.Conn.Websocket.WebsocketConn = conn
 	sess.Conn.Http.Request, sess.Conn.Http.ResponseWriter = r, w
 
@@ -74,7 +74,7 @@ func (i *wsInstance) accept(s *play.Session) {
 	}()
 	i.hook.OnConnect(s, nil)
 
-	if request, err = i.transport.Receive(s.Conn); request != nil {
+	if request, err = i.packer.Receive(s.Conn); request != nil {
 		if err = doRequest(context.Background(), s, request); err != nil {
 			return
 		}
@@ -98,7 +98,7 @@ func (i *wsInstance) onReady(sess *play.Session) error {
 			sess.Conn.Websocket.Message = message
 			sess.Conn.Websocket.MessageType = messageType
 
-			if request, err := i.transport.Receive(sess.Conn); err != nil {
+			if request, err := i.packer.Receive(sess.Conn); err != nil {
 				return err
 			} else {
 				if err := doRequest(context.Background(), sess, request); err != nil {
@@ -128,8 +128,13 @@ func (i *wsInstance) Info() play.InstanceInfo {
 	return i.info
 }
 
-func (i *wsInstance) Transport() play.IHandleTransport {
-	return i.transport
+func (i *wsInstance) Packer() play.IPacker {
+	return i.packer
+}
+
+func (i *wsInstance) Transport(conn *play.Conn, data []byte) (err error) {
+	err = conn.Websocket.WebsocketConn.WriteMessage(conn.Websocket.MessageType, data)
+	return err
 }
 
 func (i *wsInstance) Hook() play.IServerHook {
@@ -149,7 +154,7 @@ func (i *wsInstance) WithCertificate(cert tls.Certificate) *wsInstance {
 	return i
 }
 
-func (i *wsInstance) Run(listener net.Listener) error {
+func (i *wsInstance) Run(listener net.Listener, udplistener net.PacketConn) error {
 	i.httpServer.Handler = i
 	if i.tlsConfig != nil {
 		listener = tls.NewListener(listener, i.tlsConfig)
@@ -160,4 +165,8 @@ func (i *wsInstance) Run(listener net.Listener) error {
 
 func (i *wsInstance) Close() {
 	i.ctrl.WaitTask()
+}
+
+func (i *wsInstance) Network() string {
+	return "tcp"
 }

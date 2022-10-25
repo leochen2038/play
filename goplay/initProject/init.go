@@ -9,16 +9,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitlab.youban.com/go-utils/play/goplay/reconst/env"
+	"github.com/leochen2038/play/goplay/env"
 )
 
 func InitProject(upgrade bool) (err error) {
+	var absPath string
 	_, err = os.Stat(env.ProjectPath + "/go.mod")
 	if !os.IsNotExist(err) && !upgrade {
 		return errors.New("project has alread exist")
 	}
 
-	absPath, err := filepath.Abs(env.ProjectPath)
+	if absPath, err = filepath.Abs(env.ProjectPath); err != nil {
+		return
+	}
+
 	if err = createMain(filepath.Base(absPath), upgrade); err != nil {
 		return
 	}
@@ -43,9 +47,9 @@ func InitProject(upgrade bool) (err error) {
 	if err = createHook(); err != nil {
 		return
 	}
-	if err = createTransport(); err != nil {
-		return
-	}
+	// if err = createTransport(); err != nil {
+	// 	return
+	// }
 	return
 }
 
@@ -98,45 +102,19 @@ func createHook() (err error) {
 	if err = os.Mkdir(env.ProjectPath+"/hook", 0744); err != nil {
 		return
 	}
-
-	code := fmt.Sprintf(`
-package hook
-
-import (
-	"%s"
-)
-
-type ServerHook struct {
-
-}
-
-func (h *ServerHook)OnConnect(sess *play.Session, err error) {
-	// TODO
-}
-
-func (h *ServerHook)OnClose(sess *play.Session, err error) {
-	// TODO
-}
-
-func (h *ServerHook)OnRequest(ctx *play.Context)  {
-	// TODO
-}
-
-func (h *ServerHook)OnResponse(ctx *play.Context) {
-	// TODO
-}
-
-func (h *ServerHook)OnFinish(ctx *play.Context) {
-	// TODO
-}
-`, env.FrameworkName)
+	code := getHookTpl()
 	err = ioutil.WriteFile(env.ProjectPath+"/hook/server_hook.go", []byte(code), 0644)
 	return
 }
 
-func createTransport() (err error) {
-	return os.Mkdir(env.ProjectPath+"/transport", 0744)
-}
+// func createTransport() (err error) {
+// 	if err = os.Mkdir(env.ProjectPath+"/transport", 0744); err != nil {
+// 		return
+// 	}
+// 	code := getHttpTransportTpl()
+// 	err = ioutil.WriteFile(env.ProjectPath+"/transport/http.go", []byte(code), 0644)
+// 	return
+// }
 
 func createMiddleware() (err error) {
 	return os.Mkdir(env.ProjectPath+"/middleware", 0744)

@@ -1,0 +1,5 @@
+.*
+!.play
+!.gitignore
+goplay/goplay.exe
+goplay/goplay

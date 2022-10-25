@@ -1,13 +1,13 @@
 package renders
 
-import "gitlab.youban.com/go-utils/play/library/golang/json"
+import "github.com/leochen2038/play/codec/protos/golang/json"
 
 var jRender = &jsonRender{}
 
 type jsonRender struct {
 }
 
-func GetJsonRender() Render {
+func GetRenderOfJson() Render {
 	return jRender
 }
 

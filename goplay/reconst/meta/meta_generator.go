@@ -21,7 +21,7 @@ import (
 	if meta.Strategy.Storage.Type == "mongodb" {
 		src += "primitive.ObjectID\t `bson:\"" + meta.Key.Name + "\""
 		if meta.Key.Alias != "" {
-			src += ` key:"` + meta.Key.Alias + `" json:"` + meta.Key.Alias + `"`
+			src += ` key:"` + meta.Key.Alias + `" json:"` + meta.Key.Alias + `" note:"` + meta.Key.Note + `"`
 		}
 		src += "`\n"
 	} else if meta.Strategy.Storage.Type == "mysql" {
@@ -31,7 +31,7 @@ import (
 			src += meta.Key.Type + "\t `db:\"" + meta.Key.Name + "\""
 		}
 		if meta.Key.Alias != "" {
-			src += ` key:"` + meta.Key.Alias + `" json:"` + meta.Key.Alias + `"`
+			src += ` key:"` + meta.Key.Alias + `" json:"` + meta.Key.Alias + `" note:"` + meta.Key.Note + `"`
 		}
 		src += "`\n"
 	}
@@ -43,13 +43,13 @@ import (
 		if meta.Strategy.Storage.Type == "mongodb" {
 			src += "\t `bson:\"" + vb.Name + "\""
 			if vb.Alias != "" {
-				src += ` key:"` + vb.Alias + `" json:"` + vb.Alias + `"`
+				src += ` key:"` + vb.Alias + `" json:"` + vb.Alias + `" note:"` + vb.Note + `"`
 			}
 			src += "`\n"
 		} else {
 			src += "\t `db:\"" + vb.Name + "\""
 			if vb.Alias != "" {
-				src += ` key:"` + vb.Alias + `" json:"` + vb.Alias + `"`
+				src += ` key:"` + vb.Alias + `" json:"` + vb.Alias + `" note:"` + vb.Note + `"`
 			}
 			src += "`\n"
 		}
@@ -61,26 +61,29 @@ import (
 	src += "}\n"
 
 	src += fmt.Sprintf(`
+// New%s %s	
 func New%s() *%s {
 	return &%s{%s}
 }
-`, funcName, funcName, funcName, metaDefaultValue(meta.Fields.List))
+`, funcName, meta.Note, funcName, funcName, funcName, metaDefaultValue(meta.Fields.List))
 	src += "\n"
 
 	if meta.Key.Type != "auto" {
-		src += fmt.Sprintf(`func (m *%s)Set%s(val %s) *%s {
+		src += fmt.Sprintf(`// Set%s %s
+func (m *%s)Set%s(val %s) *%s {
 	m.%s = val
 	return m
 }
-`, funcName, formatUcfirstName(meta.Key.Name), getGolangType(meta.Key.Type), funcName, formatUcfirstName(meta.Key.Name))
+`, formatUcfirstName(meta.Key.Name), meta.Key.Note, funcName, formatUcfirstName(meta.Key.Name), getGolangType(meta.Key.Type), funcName, formatUcfirstName(meta.Key.Name))
 	}
 
 	for _, vb := range meta.Fields.List {
-		src += fmt.Sprintf(`func (m *%s)Set%s(val %s) *%s {
+		src += fmt.Sprintf(`// Set%s %s
+func (m *%s)Set%s(val %s) *%s {
 	m.%s = val
 	return m
 }
-`, funcName, ucfirst(vb.Name), getGolangType(vb.Type), funcName, ucfirst(vb.Name))
+`, ucfirst(vb.Name), vb.Note, funcName, ucfirst(vb.Name), getGolangType(vb.Type), funcName, ucfirst(vb.Name))
 	}
 	src += "\n"
 

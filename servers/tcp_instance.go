@@ -2,46 +2,30 @@ package servers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"runtime/debug"
+	"strings"
 
-	"gitlab.youban.com/go-utils/play"
+	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/packers"
 )
 
 type TcpInstance struct {
-	info      play.InstanceInfo
-	hook      play.IServerHook
-	ctrl      *play.InstanceCtrl
-	transport play.IHandleTransport
+	info   play.InstanceInfo
+	hook   play.IServerHook
+	ctrl   *play.InstanceCtrl
+	packer play.IPacker
 }
 
-func NewTcpInstance(name string, addr string, transport play.IHandleTransport, hook play.IServerHook) (*TcpInstance, error) {
-	if transport == nil {
-		return nil, errors.New("tcp instance transport must not be nil")
+func NewTcpInstance(name string, addr string, hook play.IServerHook, packer play.IPacker) *TcpInstance {
+	if packer == nil {
+		packer = packers.NewPlayPacker()
 	}
 	if hook == nil {
-		return nil, errors.New("tcp instance server hook must not be nil")
+		hook = defaultHook{}
 	}
-	return &TcpInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: TypeTcp}, transport: transport, hook: hook, ctrl: new(play.InstanceCtrl)}, nil
-}
-
-func (i *TcpInstance) accept(s *play.Session) {
-	var err error
-	defer func() {
-		if panicInfo := recover(); panicInfo != nil {
-			fmt.Printf("panic: %v\n%v", panicInfo, string(debug.Stack()))
-		}
-		_ = s.Conn.Tcp.Conn.Close()
-	}()
-
-	defer func() {
-		i.hook.OnClose(s, err)
-	}()
-
-	i.hook.OnConnect(s, nil)
-	err = i.onReady(s)
+	return &TcpInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: play.SERVER_TYPE_TCP}, packer: packer, hook: hook, ctrl: new(play.InstanceCtrl)}
 }
 
 func (i *TcpInstance) onReady(s *play.Session) (err error) {
@@ -60,17 +44,17 @@ func (i *TcpInstance) onReady(s *play.Session) (err error) {
 				return
 			}
 			s.Conn.Tcp.Surplus = append(s.Conn.Tcp.Surplus, buffer[:n]...)
-			if true {
-				if request, err = i.transport.Receive(s.Conn); err != nil {
-					return
-				}
-				if request == nil {
-					continue
-				} else {
+			if request, err = i.packer.Receive(s.Conn); err != nil {
+				return
+			}
+			if request == nil {
+				continue
+			} else {
+				if request.Version > s.Conn.Tcp.Version {
 					s.Conn.Tcp.Version = request.Version
-					if err = doRequest(context.Background(), s, request); err != nil {
-						return err
-					}
+				}
+				if err = doRequest(context.Background(), s, request); err != nil {
+					return err
 				}
 			}
 		}
@@ -85,34 +69,58 @@ func (i *TcpInstance) Hook() play.IServerHook {
 	return i.hook
 }
 
-func (i *TcpInstance) Transport() play.IHandleTransport {
-	return i.transport
+func (i *TcpInstance) Packer() play.IPacker {
+	return i.packer
+}
+
+func (i *TcpInstance) Transport(conn *play.Conn, data []byte) error {
+	_, err := conn.Tcp.Conn.Write(data)
+	return err
 }
 
 func (i *TcpInstance) Ctrl() *play.InstanceCtrl {
 	return i.ctrl
 }
 
-func (i *TcpInstance) Run(listener net.Listener) error {
+func (i *TcpInstance) Run(listener net.Listener, udplistener net.PacketConn) error {
 	for {
-		if conn, err := listener.Accept(); err != nil {
-			i.hook.OnConnect(play.NewSession(context.Background(), nil, i), err)
-			continue
-		} else {
-			go func() {
-				defer func() {
-					if panicInfo := recover(); panicInfo != nil {
-						// call system log ?
-					}
-				}()
-				s := play.NewSession(context.Background(), new(play.Conn), i)
-				s.Conn.Tcp.Conn = conn
-				i.accept(s)
-			}()
+		var err error
+		var conn net.Conn
+		if conn, err = listener.Accept(); err != nil {
+			if strings.Contains(err.Error(), "use of closed network connection") {
+				return err
+			}
 		}
+
+		go func(err error, conn net.Conn) {
+			s := play.NewSession(context.Background(), i)
+			s.Conn.Tcp.Conn = conn
+
+			defer func() {
+				if panicInfo := recover(); panicInfo != nil {
+					fmt.Printf("panic: %v\n%v", panicInfo, string(debug.Stack()))
+				}
+				if s.Conn.Tcp.Conn != nil {
+					_ = s.Conn.Tcp.Conn.Close()
+				}
+			}()
+
+			defer func() {
+				i.hook.OnClose(s, err)
+			}()
+			i.hook.OnConnect(s, err)
+
+			if err == nil {
+				err = i.onReady(s)
+			}
+		}(err, conn)
 	}
 }
 
 func (i *TcpInstance) Close() {
 	i.ctrl.WaitTask()
+}
+
+func (i *TcpInstance) Network() string {
+	return "tcp"
 }

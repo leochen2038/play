@@ -1,24 +1,27 @@
 package main
 
 import (
-	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
 
-	"gitlab.youban.com/go-utils/play/goplay/initProject"
-	"gitlab.youban.com/go-utils/play/goplay/reconst"
-	"gitlab.youban.com/go-utils/play/goplay/reconst/env"
+	"github.com/leochen2038/play/goplay/env"
+	"github.com/leochen2038/play/goplay/gendoc"
+	"github.com/leochen2038/play/goplay/initProject"
+	"github.com/leochen2038/play/goplay/reconst"
 )
 
 var command string
 
+// var commandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+
 // 多包同名，可以在import进行引用别名
 func init() {
-	env.FrameworkName = "gitlab.youban.com/go-utils/play"
-	env.FrameworkVer = "v0.6.26"
+	env.FrameworkVer = "v0.7.2"
+	env.FrameworkName = "github.com/leochen2038/play"
+	// commandLine.StringVar(&env.FrameworkName, "f", "github.com/leochen2038/play", "framework module")
+	// commandLine.Parse(os.Args[2:])
+	// commandLine.Parse(os.Args[2:])
 
 	if len(os.Args) < 2 {
 		fmt.Printf(`goplay version: %s
@@ -27,7 +30,8 @@ Usage:
 
 The commands are:
 	init	init a new project
-	reconst	project path`, env.FrameworkVer)
+	reconst	project path
+    gendoc  generate api document`, env.FrameworkVer)
 		os.Exit(1)
 	}
 	if len(os.Args) < 3 {
@@ -40,39 +44,34 @@ The commands are:
 	env.GoVersion = runtime.Version()[2:]
 	env.WithoutModuleName = 0
 	env.ActionDefaultTimeout = "500"
+	env.InitFileName = env.ProjectPath + "/init.go"
+	env.GenFileDir = env.ProjectPath + "/doc.md"
+	env.GenFileName = env.GenFileDir + "/main.go"
 }
 
 func main() {
+	fmt.Printf(`
+     ____     __      ___  __  __
+    / __ \   / /     /   | \ \/ /
+   / /_/ /  / /     / /| |  \  / 
+  / ____/  / /___  / ___ |  / /  
+ /_/      /_____/ /_/  |_| /_/ %s 
+
+`, env.FrameworkVer)
 	switch command {
 	case "init":
 		if err := initProject.InitProject(false); err != nil {
 			fmt.Println("init project error ", err)
 		}
 	case "reconst":
-		module, err := parseModuleName(os.Args[2])
-		if err != nil {
+		if err := reconst.ReconstProject(); err != nil {
 			fmt.Println(err)
 		}
-
-		env.ModuleName = module
-		if err := reconst.ReconstProject(); err != nil {
+	case "gendoc":
+		if err := gendoc.GenDoc(); err != nil {
 			fmt.Println(err)
 		}
 	default:
 		fmt.Println("unknow command:", command)
 	}
-}
-
-func parseModuleName(path string) (string, error) {
-	modPath := fmt.Sprintf("%s/go.mod", path)
-	_, err := os.Stat(modPath)
-	if os.IsNotExist(err) {
-		return "", errors.New("can not find go.mod in project")
-	}
-
-	file, err := os.Open(modPath)
-	br := bufio.NewReader(file)
-	data, _, err := br.ReadLine()
-
-	return strings.Split(string(data), " ")[1], nil
 }

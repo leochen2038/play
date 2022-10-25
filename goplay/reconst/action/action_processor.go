@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"gitlab.youban.com/go-utils/play/goplay/reconst/env"
+	"github.com/leochen2038/play/goplay/env"
 )
 
 func checkProcessorFile(name string) (err error) {
@@ -21,7 +21,7 @@ func checkProcessorFile(name string) (err error) {
 	path := env.ProjectPath + "/processor/" + v[:idx]
 
 	pacekageNme := path[strings.LastIndex(path, "/")+1:]
-	frameworkPath := "gitlab.youban.com/go-utils/play"
+	frameworkPath := "github.com/leochen2038/play"
 	funcName := v[idx+1:]
 	_, err = os.Stat(file)
 	if os.IsNotExist(err) {

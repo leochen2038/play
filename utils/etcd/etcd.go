@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var reConnect bool
+
 type EtcdAgent struct {
 	client    *clientv3.Client
 	Endpoints []string
@@ -97,10 +99,17 @@ func (e EtcdAgent) StartKeepAlive(key string, ttl int64, change func() (string, 
 				log.Println("[playregister]", panicInfo, err)
 			}
 			time.Sleep(5 * time.Second)
+			reConnect = true
 			go e.StartKeepAlive(key, ttl, change)
 		}()
 		err = e.keepAlive(key, ttl, change)
 	}()
+}
+
+func IsReconnect() bool {
+	isReconnect := reConnect
+	reConnect = false
+	return isReconnect
 }
 
 func (e EtcdAgent) keepAlive(key string, ttl int64, change func() (string, bool, error)) (err error) {

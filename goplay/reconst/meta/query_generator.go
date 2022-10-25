@@ -12,13 +12,14 @@ import (
 	"strings"
 	"unicode"
 
-	"gitlab.youban.com/go-utils/play/goplay/reconst/env"
+	"github.com/leochen2038/play/goplay/env"
 )
 
 type Meta struct {
 	XMLName  xml.Name     `xml:"meta"`
 	Module   string       `xml:"module,attr"`
 	Name     string       `xml:"name,attr"`
+	Note     string       `xml:"note,attr"`
 	Tag      string       `xml:"tag,attr"`
 	Key      MetaField    `xml:"key"`
 	Fields   MetaFields   `xml:"fields"`
@@ -33,6 +34,7 @@ type MetaField struct {
 	Name    string `xml:"name,attr"`
 	Alias   string `xml:"alias,attr"`
 	Type    string `xml:"type,attr"`
+	Length  int    `xml:"length,attr"`
 	Note    string `xml:"note,attr"`
 	Default string `xml:"default,attr"`
 }
@@ -49,8 +51,9 @@ type MetaStorage struct {
 	Router   string `xml:"router,attr"`
 }
 
-func MetaGenerator() error {
-	return filepath.Walk(env.ProjectPath+"/assets/meta", func(filename string, fi os.FileInfo, err error) error {
+func MetaGenerator() (err error) {
+	var metas []Meta
+	err = filepath.Walk(env.ProjectPath+"/assets/meta", func(filename string, fi os.FileInfo, err error) error {
 		var data []byte
 		var meta Meta
 
@@ -61,13 +64,22 @@ func MetaGenerator() error {
 			if err = xml.Unmarshal(data, &meta); err != nil {
 				return errors.New("check: " + filename + " failure:" + err.Error())
 			}
+
 			if err = writeMeta(meta); err != nil {
 				return errors.New("check: " + filename + " failure: " + err.Error())
 			}
+			metas = append(metas, meta)
 			fmt.Println("check:", filename, "success")
 		}
 		return nil
 	})
+	if err == nil {
+		fmt.Println("mysql creater sql: ")
+		for _, v := range metas {
+			fmt.Println(generateMysqlTable(v))
+		}
+	}
+	return err
 }
 
 func formatLowerName(name string) string {
@@ -161,6 +173,7 @@ type query%s struct {
 	initFields += fmt.Sprintf(`"%s":{}`, meta.Key.Name)
 
 	src += fmt.Sprintf(`
+// %s %s	
 func %s(c context.Context) *query%s {
 	obj := &query%s{}
 	obj.QueryInfo.Module = "%s"
@@ -173,28 +186,30 @@ func %s(c context.Context) *query%s {
 	obj.QueryInfo.Fields = map[string]struct{}{%s}
 	return obj
 }
-`, funcName, funcName, funcName, meta.Module, meta.Name, meta.Strategy.Storage.Database, meta.Strategy.Storage.Table, meta.Strategy.Storage.Router, initFields)
+`, funcName, meta.Note, funcName, funcName, funcName, meta.Module, meta.Name, meta.Strategy.Storage.Database, meta.Strategy.Storage.Table, meta.Strategy.Storage.Router, initFields)
 
 	for _, cond := range con1List {
 		// generate key
 		for where, wherebool := range whereOr {
 			src += fmt.Sprintf(`
+// %s%s%s %s			
 func (q *query%s)%s%s%s(val interface{}) *query%s {
 	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:val})
 	return q
 }
-`, funcName, where, formatUcfirstName(meta.Key.Name), cond, funcName, wherebool, meta.Key.Name, cond)
+`, where, formatUcfirstName(meta.Key.Name), cond, meta.Key.Note, funcName, where, formatUcfirstName(meta.Key.Name), cond, funcName, wherebool, meta.Key.Name, cond)
 		}
 
 		// generate fields
 		for _, vb := range meta.Fields.List {
 			for where, wherebool := range whereOr {
 				src += fmt.Sprintf(`
+// %s%s%s %s				
 func (q *query%s)%s%s%s(val interface{}) *query%s {
 	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:val})
 	return q
 }
-`, funcName, where, ucfirst(vb.Name), cond, funcName, wherebool, vb.Name, cond)
+`, where, ucfirst(vb.Name), cond, vb.Note, funcName, where, ucfirst(vb.Name), cond, funcName, wherebool, vb.Name, cond)
 			}
 		}
 	}
@@ -203,22 +218,24 @@ func (q *query%s)%s%s%s(val interface{}) *query%s {
 		// generate key
 		for where, wherebool := range whereOr {
 			src += fmt.Sprintf(`
+// %s%s%s %s			
 func (q *query%s)%s%s%s(v1 interface{}, v2 interface{}) *query%s {
 	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:[2]interface{}{v1, v2}})
 	return q
 }
-`, funcName, where, formatUcfirstName(meta.Key.Name), cond, funcName, wherebool, meta.Key.Name, cond)
+`, where, formatUcfirstName(meta.Key.Name), cond, meta.Key.Note, funcName, where, formatUcfirstName(meta.Key.Name), cond, funcName, wherebool, meta.Key.Name, cond)
 		}
 
 		// generate fields
 		for _, vb := range meta.Fields.List {
 			for where, wherebool := range whereOr {
 				src += fmt.Sprintf(`
+// %s%s%s %s				
 func (q *query%s)%s%s%s(v1 interface{}, v2 interface{}) *query%s {
 	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:[2]interface{}{v1, v2}})
 	return q
 }
-`, funcName, where, ucfirst(vb.Name), cond, funcName, wherebool, vb.Name, cond)
+`, where, ucfirst(vb.Name), cond, vb.Note, funcName, where, ucfirst(vb.Name), cond, funcName, wherebool, vb.Name, cond)
 			}
 		}
 	}
@@ -227,41 +244,45 @@ func (q *query%s)%s%s%s(v1 interface{}, v2 interface{}) *query%s {
 		// generate key
 		for where, wherebool := range whereOr {
 			src += fmt.Sprintf(`
+// %s%s%s %s			
 func (q *query%s)%s%s%s(s []interface{}) *query%s {
 	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:s})
 	return q
 }
-`, funcName, where, formatUcfirstName(meta.Key.Name), cond, funcName, wherebool, meta.Key.Name, cond)
+`, where, formatUcfirstName(meta.Key.Name), cond, meta.Key.Note, funcName, where, formatUcfirstName(meta.Key.Name), cond, funcName, wherebool, meta.Key.Name, cond)
 		}
 
 		// generate fields
 		for _, vb := range meta.Fields.List {
 			for where, wherebool := range whereOr {
 				src += fmt.Sprintf(`
+// %s%s%s %s				
 func (q *query%s)%s%s%s(s []%s) *query%s {
 	q.QueryInfo.Conditions = append(q.QueryInfo.Conditions, play.Condition{AndOr:%s, Field:"%s", Con:"%s", Val:s})
 	return q
 }
-`, funcName, where, ucfirst(vb.Name), cond, getGolangType(vb.Type), funcName, wherebool, vb.Name, cond)
+`, where, ucfirst(vb.Name), cond, vb.Note, funcName, where, ucfirst(vb.Name), cond, getGolangType(vb.Type), funcName, wherebool, vb.Name, cond)
 			}
 		}
 	}
 	for k, v := range map[string]string{"Asc": "asc", "Desc": "desc"} {
 		// generate key
 		src += fmt.Sprintf(`
+// %s%s %s		
 func (q *query%s)OrderBy%s%s() *query%s {
 	q.QueryInfo.Order = append(q.QueryInfo.Order, [2]string{"%s", "%s"})
 	return q
 }
-`, funcName, formatUcfirstName(meta.Key.Name), k, funcName, meta.Key.Name, v)
+`, formatUcfirstName(meta.Key.Name), k, meta.Key.Note, funcName, formatUcfirstName(meta.Key.Name), k, funcName, meta.Key.Name, v)
 		// generate fields
 		for _, vb := range meta.Fields.List {
 			src += fmt.Sprintf(`
+// %s%s %s			
 func (q *query%s)OrderBy%s%s() *query%s {
 	q.QueryInfo.Order = append(q.QueryInfo.Order, [2]string{"%s", "%s"})
 	return q
 }
-`, funcName, ucfirst(vb.Name), k, funcName, vb.Name, v)
+`, ucfirst(vb.Name), k, vb.Note, funcName, ucfirst(vb.Name), k, funcName, vb.Name, v)
 		}
 	}
 
@@ -411,6 +432,7 @@ func (q *query%s)Update() (int64, error) {
 
 	for _, field := range meta.Fields.List {
 		src += fmt.Sprintf(`
+// Set%s %s		
 func (q *query%s)Set%s(val %s, opt ...string) *query%s {
 	args := make([]interface{}, 0, 2)
 	if len(opt) > 0 {
@@ -421,7 +443,7 @@ func (q *query%s)Set%s(val %s, opt ...string) *query%s {
 	q.QueryInfo.Sets["%s"] = args
 	return q
 }
-`, funcName, formatUcfirstName(field.Name), getGolangType(field.Type), funcName, field.Name)
+`, formatUcfirstName(field.Name), field.Note, funcName, formatUcfirstName(field.Name), getGolangType(field.Type), funcName, field.Name)
 	}
 	return src
 }
@@ -466,7 +488,6 @@ func writeMeta(meta Meta) (err error) {
 	if err = ioutil.WriteFile(filePath, []byte(src), 0644); err != nil {
 		return
 	}
-
 	exec.Command(runtime.GOROOT()+"/bin/gofmt", "-w", filePath).Run()
 	return
 }

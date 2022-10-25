@@ -6,11 +6,23 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"gitlab.youban.com/go-utils/play/codec/binders"
-	"gitlab.youban.com/go-utils/play/codec/renders"
+	"github.com/leochen2038/play/codec/binders"
+	"github.com/lucas-clemente/quic-go"
+)
+
+const (
+	SERVER_TYPE_HTTP  = 1
+	SERVER_TYPE_TCP   = 2
+	SERVER_TYPE_SSE   = 3
+	SERVER_TYPE_WS    = 4
+	SERVER_TYPE_H2C   = 5
+	SERVER_TYPE_QUIC  = 6
+	SERVER_TYPE_HTTP3 = 7
 )
 
 type IServerHook interface {
+	OnBoot(server IServer)
+	OnShutdown(server IServer)
 	OnConnect(sess *Session, err error)
 	OnClose(sess *Session, err error)
 
@@ -23,21 +35,16 @@ type IServer interface {
 	Info() InstanceInfo
 	Ctrl() *InstanceCtrl
 	Hook() IServerHook
-	Transport() IHandleTransport
-
-	Run(net.Listener) error
+	Packer() IPacker
+	Transport(*Conn, []byte) error
+	Network() string
+	Run(net.Listener, net.PacketConn) error
 	Close()
 }
 
-// type Binder interface {
-// 	Bind(v reflect.Value) error
-// 	Get(key string) (interface{}, error)
-// 	Set(key string, val interface{})
-// }
-
-type IHandleTransport interface {
+type IPacker interface {
 	Receive(c *Conn) (*Request, error)
-	Send(c *Conn, res *Response) error
+	Pack(c *Conn, res *Response) ([]byte, error)
 }
 
 type InstanceInfo struct {
@@ -61,6 +68,7 @@ func (c *InstanceCtrl) WaitTask() {
 }
 
 type Conn struct {
+	Type    int
 	IsClose bool
 	Http    struct {
 		Request        *http.Request
@@ -76,26 +84,31 @@ type Conn struct {
 		Surplus []byte
 		Conn    net.Conn
 	}
+	Quic struct {
+		Version byte
+		Conn    quic.Connection
+		Stream  quic.Stream
+	}
 }
 
 type Request struct {
-	Version      byte
-	Render       string
-	Caller       string
-	TagId        int
-	TraceId      string
-	SpanId       []byte
-	Respond      bool
-	ActionName   string
-	InputBinder  binders.Binder
-	OutputRender renders.Render
+	Version     byte
+	RenderName  string
+	CallerId    int
+	TagId       int
+	TraceId     string
+	SpanId      []byte
+	NonRespond  bool
+	ActionName  string
+	Attach      []byte
+	InputBinder binders.Binder
 }
 
 type Response struct {
-	ErrorCode int
-	TagId     int
-	TraceId   string
-	SpanId    []byte
-	Template  string
-	Output    Output
+	Version    byte
+	TraceId    string
+	Template   string
+	RenderName string
+	Error      error
+	Output     Output
 }

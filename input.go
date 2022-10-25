@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"gitlab.youban.com/go-utils/play/codec/binders"
+	"github.com/leochen2038/play/codec/binders"
 )
 
 type Input struct {
@@ -18,6 +18,14 @@ func NewInput(binder binders.Binder) Input {
 	return Input{binder: binder}
 }
 
+func (input *Input) Binder() binders.Binder {
+	return input.binder
+}
+
+func (input *Input) SetBinder(binder binders.Binder) {
+	input.binder = binder
+}
+
 func (input *Input) SetValue(key string, val interface{}) {
 	input.exValues.Store(key, val)
 }
@@ -26,7 +34,10 @@ func (input *Input) Value(key string) interface{} {
 	if exValue, ok := input.exValues.Load(key); ok {
 		return exValue
 	} else {
-		return input.binder.Get(key)
+		if input.binder != nil {
+			return input.binder.Get(key)
+		}
+		return nil
 	}
 }
 
@@ -35,7 +46,6 @@ func (input *Input) Bind(v reflect.Value) (err error) {
 		var tField reflect.StructField
 		var vField reflect.Value
 		var fieldCount = v.Type().NumField()
-
 		for i := 0; i < fieldCount; i++ {
 			if vField, tField = v.Field(i), v.Type().Field(i); !vField.CanInterface() {
 				continue
@@ -54,9 +64,16 @@ func (input *Input) Bind(v reflect.Value) (err error) {
 					goto NEXT
 				}
 			}
-
-			if err = input.binder.Bind(vField, tField); err != nil {
-				return err
+			if input.binder != nil {
+				if err = input.binder.Bind(vField, tField); err != nil {
+					return err
+				}
+			} else {
+				if defval := tField.Tag.Get("default"); defval != "" {
+					vField.Set(reflect.ValueOf(defval))
+				} else {
+					return errors.New("input: " + key + " <" + tField.Tag.Get("note") + "> is required")
+				}
 			}
 		NEXT:
 		}
