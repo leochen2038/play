@@ -14,7 +14,7 @@ var (
 	REFLOAT, _ = regexp.Compile("^[0-9]+[.][0-9]+$")
 )
 
-func string2Val(str string) interface{} {
+func String2Val(str string) interface{} {
 	tmp := []byte(str)
 	switch {
 	case str == "false":
@@ -63,84 +63,84 @@ func ParseBool(v interface{}) (bool, error) {
 }
 
 func ParseInt(v interface{}) (int, error) {
-	switch v.(type) {
+	switch v := v.(type) {
 	case int:
-		return v.(int), nil
+		return v, nil
 	case int64:
-		return int(v.(int64)), nil
+		return int(v), nil
 	case float32:
-		return int(v.(float32)), nil
+		return int(v), nil
 	case float64:
-		return int(v.(float64)), nil
+		return int(v), nil
 	case string:
-		return strconv.Atoi(v.(string))
+		return strconv.Atoi(v)
 	}
 	return 0, errors.New("can not convert " + reflect.TypeOf(v).String() + " to int")
 }
 
 func ParseInt64(v interface{}) (int64, error) {
-	switch v.(type) {
+	switch v := v.(type) {
 	case int:
-		return int64(v.(int)), nil
+		return int64(v), nil
 	case int8:
-		return int64(v.(int8)), nil
+		return int64(v), nil
 	case int16:
-		return int64(v.(int16)), nil
+		return int64(v), nil
 	case int32:
-		return int64(v.(int32)), nil
+		return int64(v), nil
 	case int64:
-		return v.(int64), nil
+		return v, nil
 	case float32:
-		return int64(v.(float32)), nil
+		return int64(v), nil
 	case float64:
-		return int64(v.(float64)), nil
+		return int64(v), nil
 	case string:
-		return strconv.ParseInt(v.(string), 10, 0)
+		return strconv.ParseInt(v, 10, 0)
 	}
 	return 0, errors.New("can not convert " + reflect.TypeOf(v).String() + " to int")
 }
 
 func ParseInt32(v interface{}) (int32, error) {
-	switch v.(type) {
+	switch v := v.(type) {
 	case int:
-		return int32(v.(int)), nil
+		return int32(v), nil
 	case int8:
-		return int32(v.(int8)), nil
+		return int32(v), nil
 	case int16:
-		return int32(v.(int16)), nil
+		return int32(v), nil
 	case int32:
-		return v.(int32), nil
+		return v, nil
 	case int64:
-		return int32(v.(int64)), nil
+		return int32(v), nil
 	case float32:
-		return int32(v.(float32)), nil
+		return int32(v), nil
 	case float64:
-		return int32(v.(float64)), nil
+		return int32(v), nil
 	case string:
-		val, _ := strconv.ParseInt(v.(string), 10, 0)
+		val, _ := strconv.ParseInt(v, 10, 0)
 		return int32(val), nil
 	}
 	return 0, errors.New("can not convert " + reflect.TypeOf(v).String() + " to int")
 }
 
 func ParseInt8(v interface{}) (int8, error) {
-	switch v.(type) {
+	switch v := v.(type) {
 	case int:
-		return int8(v.(int)), nil
+		return int8(v), nil
 	case int8:
-		return v.(int8), nil
+		return v, nil
 	case int16:
-		return int8(v.(int16)), nil
+		return int8(v), nil
 	case int32:
-		return int8(v.(int32)), nil
+		return int8(v), nil
 	case int64:
-		return int8(v.(int64)), nil
+		return int8(v), nil
 	case float32:
-		return int8(v.(float32)), nil
+		return int8(v), nil
 	case float64:
-		return int8(v.(float64)), nil
+		return int8(v), nil
 	case string:
-		if tmp, err := strconv.ParseInt(v.(string), 10, 0); err != nil {
+		if tmp, err := strconv.ParseInt(v, 10, 0); err != nil {
 			return 0, err
 		} else {
 			return int8(tmp), nil
@@ -150,45 +150,45 @@ func ParseInt8(v interface{}) (int8, error) {
 }
 
 func ParseFloat64(v interface{}) (float64, error) {
-	switch v.(type) {
+	switch v := v.(type) {
 	case int:
-		return float64(v.(int)), nil
+		return float64(v), nil
 	case int8:
-		return float64(v.(int8)), nil
+		return float64(v), nil
 	case int16:
-		return float64(v.(int16)), nil
+		return float64(v), nil
 	case int32:
-		return float64(v.(int32)), nil
+		return float64(v), nil
 	case int64:
-		return float64(v.(int64)), nil
+		return float64(v), nil
 	case float32:
-		return float64(v.(float32)), nil
+		return float64(v), nil
 	case float64:
-		return v.(float64), nil
+		return v, nil
 	case string:
-		return strconv.ParseFloat(v.(string), 64)
+		return strconv.ParseFloat(v, 64)
 	}
 	return 0, errors.New("can not convert " + reflect.TypeOf(v).String() + " to int")
 }
 
 func ParseFloat32(v interface{}) (float32, error) {
-	switch v.(type) {
+	switch v := v.(type) {
 	case int:
-		return float32(v.(int)), nil
+		return float32(v), nil
 	case int8:
-		return float32(v.(int8)), nil
+		return float32(v), nil
 	case int16:
-		return float32(v.(int16)), nil
+		return float32(v), nil
 	case int32:
-		return float32(v.(int32)), nil
+		return float32(v), nil
 	case int64:
-		return float32(v.(int64)), nil
+		return float32(v), nil
 	case float32:
-		return v.(float32), nil
+		return v, nil
 	case float64:
-		return float32(v.(float64)), nil
+		return float32(v), nil
 	case string:
-		if tmp, err := strconv.ParseFloat(v.(string), 32); err != nil {
+		if tmp, err := strconv.ParseFloat(v, 32); err != nil {
 			return 0, err
 		} else {
 			return float32(tmp), nil
@@ -198,47 +198,47 @@ func ParseFloat32(v interface{}) (float32, error) {
 }
 
 func ParseString(v interface{}) (string, error) {
-	switch v.(type) {
+	switch v := v.(type) {
 	case string:
-		return v.(string), nil
+		return v, nil
 	case int:
-		return strconv.FormatInt(int64(v.(int)), 10), nil
+		return strconv.FormatInt(int64(v), 10), nil
 	case int64:
-		return strconv.FormatInt(v.(int64), 10), nil
+		return strconv.FormatInt(v, 10), nil
 	case float32:
-		return strconv.FormatFloat(float64(v.(float32)), 'f', -1, 32), nil
+		return strconv.FormatFloat(float64(v), 'f', -1, 32), nil
 	case float64:
-		return strconv.FormatFloat(v.(float64), 'f', -1, 64), nil
+		return strconv.FormatFloat(v, 'f', -1, 64), nil
 	}
 	return "", errors.New("can not convert " + reflect.TypeOf(v).String() + " to string")
 }
 
 func ParseSliceString(v interface{}) (list []string, err error) {
 	var str string
-	switch v.(type) {
+	switch v := v.(type) {
 	case []string:
-		return v.([]string), nil
+		return v, nil
 	case []interface{}:
-		for _, i := range v.([]interface{}) {
+		for _, i := range v {
 			if str, err = ParseString(i); err != nil {
 				return nil, errors.New("can not conver " + reflect.TypeOf(i).String() + " to slice string")
 			}
 			list = append(list, str)
 		}
 	case []int:
-		for _, i := range v.([]int) {
+		for _, i := range v {
 			list = append(list, strconv.Itoa(i))
 		}
 	case []int64:
-		for _, i := range v.([]int64) {
+		for _, i := range v {
 			list = append(list, strconv.FormatInt(i, 10))
 		}
 	case []float32:
-		for _, i := range v.([]float32) {
+		for _, i := range v {
 			list = append(list, strconv.FormatFloat(float64(i), 'f', -1, 32))
 		}
 	case []float64:
-		for _, i := range v.([]float64) {
+		for _, i := range v {
 			list = append(list, strconv.FormatFloat(i, 'f', -1, 32))
 		}
 	}
@@ -247,31 +247,31 @@ func ParseSliceString(v interface{}) (list []string, err error) {
 }
 
 func ParseSliceInterface(v interface{}) (list []interface{}, err error) {
-	switch v.(type) {
+	switch v := v.(type) {
 	case []interface{}:
-		return v.([]interface{}), nil
+		return v, nil
 	case []string:
-		for _, i := range v.([]string) {
+		for _, i := range v {
 			list = append(list, i)
 		}
 	case []int:
-		for _, i := range v.([]int) {
+		for _, i := range v {
 			list = append(list, i)
 		}
 	case []int32:
-		for _, i := range v.([]int32) {
+		for _, i := range v {
 			list = append(list, i)
 		}
 	case []int64:
-		for _, i := range v.([]int64) {
+		for _, i := range v {
 			list = append(list, i)
 		}
 	case []float64:
-		for _, i := range v.([]float64) {
+		for _, i := range v {
 			list = append(list, i)
 		}
 	case []float32:
-		for _, i := range v.([]float32) {
+		for _, i := range v {
 			list = append(list, i)
 		}
 	}

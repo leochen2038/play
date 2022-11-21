@@ -1,6 +1,7 @@
 package binders
 
 import (
+	"encoding/base64"
 	"errors"
 	"reflect"
 	"strconv"
@@ -13,8 +14,12 @@ type jsonBinder struct {
 	root gjson.Result
 }
 
-func NewJsonDecoder(data []byte) Binder {
+func GetBinderOfJson(data []byte) Binder {
 	return &jsonBinder{root: gjson.GetBytes(data, "@this")}
+}
+
+func (b *jsonBinder) Name() string {
+	return "json"
 }
 
 func (b *jsonBinder) Get(key string) (val interface{}) {
@@ -27,14 +32,14 @@ func (b *jsonBinder) Get(key string) (val interface{}) {
 }
 
 func (b *jsonBinder) Bind(v reflect.Value, s reflect.StructField) error {
-	return bindValue(v, s, b.root, "")
+	return b.bindValue(v, s, b.root, "")
 }
 
-func bindValue(v reflect.Value, s reflect.StructField, source gjson.Result, preKey string) (err error) {
-	var keys, bind, fullKey string
+func (b *jsonBinder) bindValue(v reflect.Value, s reflect.StructField, source gjson.Result, preKey string) (err error) {
+	var keys, required, fullKey string
 	var item gjson.Result
 
-	bind, keys = s.Tag.Get("bind"), s.Tag.Get("key")
+	required, keys = s.Tag.Get("required"), s.Tag.Get("key")
 	if keys == "" {
 		keys = s.Name
 	}
@@ -59,10 +64,10 @@ func bindValue(v reflect.Value, s reflect.StructField, source gjson.Result, preK
 	if !item.Exists() || item.Type == gjson.Null {
 		if defaultValue := s.Tag.Get("default"); defaultValue != "" {
 			if err = setValWithString(v, s, defaultValue); err != nil {
-				return errors.New("input field <" + fullKey + "> " + err.Error())
+				return errors.New("input: " + fullKey + " <" + s.Tag.Get("note") + "> " + err.Error())
 			}
-		} else if bind == "required" {
-			return errors.New("input field <" + fullKey + "> is required")
+		} else if required == "true" {
+			return errors.New("input: " + fullKey + " <" + s.Tag.Get("note") + "> is required")
 		}
 		return nil
 	}
@@ -72,19 +77,22 @@ func bindValue(v reflect.Value, s reflect.StructField, source gjson.Result, preK
 		if s.Type.String() == "time.Time" {
 			return setValWithGjson(v, s, item)
 		} else {
-			return bindStruct(v, item, fullKey)
+			return b.bindStruct(v, item, fullKey)
 		}
 	case reflect.Slice:
-		return bindSlice(v, s, item, fullKey)
+		if err = b.bindSlice(v, item, fullKey); err != nil {
+			return errors.New("input: " + fullKey + " " + err.Error() + " for json")
+		}
+		return nil
 	default:
 		return setValWithGjson(v, s, item)
 	}
 }
 
-func bindStruct(v reflect.Value, source gjson.Result, preKey string) (err error) {
+func (b *jsonBinder) bindStruct(v reflect.Value, source gjson.Result, preKey string) (err error) {
 	count := v.Type().NumField()
 	for i := 0; i < count; i++ {
-		if err = bindValue(v.Field(i), v.Type().Field(i), source, preKey); err != nil {
+		if err = b.bindValue(v.Field(i), v.Type().Field(i), source, preKey); err != nil {
 			return
 		}
 	}
@@ -92,32 +100,69 @@ func bindStruct(v reflect.Value, source gjson.Result, preKey string) (err error)
 	return
 }
 
-func bindSlice(v reflect.Value, s reflect.StructField, source gjson.Result, preKey string) (err error) {
-	if s.Type.Kind() == reflect.Struct {
+func (b *jsonBinder) bindSlice(vField reflect.Value, source gjson.Result, preKey string) (err error) {
+	fieldKind := vField.Type().Elem().Kind()
+	if fieldKind == reflect.Struct {
 		source.ForEach(func(key, value gjson.Result) bool {
-			v := reflect.Indirect(reflect.New(v.Type().Elem()))
-			if err = bindStruct(v, value, preKey); err != nil {
+			v := reflect.Indirect(reflect.New(vField.Type().Elem()))
+			if err = b.bindStruct(v, value, preKey); err != nil {
 				return false
 			}
-			v.Set(reflect.Append(v, v))
+			vField.Set(reflect.Append(vField, v))
+			return true
+		})
+	} else if fieldKind == reflect.Slice {
+		source.ForEach(func(key, value gjson.Result) bool {
+			v := reflect.Indirect(reflect.New(vField.Type().Elem()))
+			if err = b.bindSlice(v, value, preKey); err != nil {
+				return false
+			}
+			vField.Set(reflect.Append(vField, v))
 			return true
 		})
 	} else {
-		var elems = v
+		var elems = vField
 		source.ForEach(func(key, value gjson.Result) bool {
-			if elems, err = setSliceValueWithGJson(v.Type().String(), elems, &value); err != nil {
+			if elems, err = b.setSliceValueWithGJson(vField.Type().String(), elems, &value); err != nil {
 				return false
 			}
-			v.Set(elems)
+			vField.Set(elems)
 			return true
 		})
 	}
 	return
 }
 
-func setSliceValueWithGJson(fieldType string, elems reflect.Value, value *gjson.Result) (reflect.Value, error) {
+func setValWithGjson(vField reflect.Value, tField reflect.StructField, gValue gjson.Result) error {
+	var val interface{}
+	var err error
+
+	if err = checkRegex(tField, gValue.String()); err != nil {
+		return err
+	}
+
+	if tStr := strings.Trim(tField.Type.String(), "[]"); tStr == "interface {}" {
+		val = gValue.Value()
+	} else {
+		if val, err = parseInterface(tStr, gValue.String(), tField); err != nil {
+			return err
+		}
+	}
+	vField.Set(reflect.ValueOf(val))
+	return nil
+}
+
+func (b *jsonBinder) setSliceValueWithGJson(fieldType string, elems reflect.Value, value *gjson.Result) (reflect.Value, error) {
 	if fieldType == "[]interface {}" {
 		elems = reflect.Append(elems, reflect.ValueOf(value.Value()))
+		return elems, nil
+	}
+	if fieldType == "[]uint8" && value.Type.String() == "String" {
+		by, err := base64.StdEncoding.DecodeString(value.String())
+		if err != nil {
+			return elems, errors.New("is not base64 string")
+		}
+		elems.SetBytes(by)
 		return elems, nil
 	}
 	if fieldType != "[]string" && value.Type.String() != "Number" {

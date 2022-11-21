@@ -53,7 +53,7 @@ func NewGroupSocket(maxIdle int) *GroupSocket {
 
 func (gs *GroupSocket) SetGroup(groupName string, hosts map[string]int) {
 	gs.mu.Lock()
-	gs.mu.Unlock()
+	defer gs.mu.Unlock()
 
 	if _, ok := gs.hosts[groupName]; ok {
 		for _, v := range gs.groups[groupName].hostsWeighted {

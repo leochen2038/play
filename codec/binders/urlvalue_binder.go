@@ -2,6 +2,8 @@ package binders
 
 import (
 	"errors"
+	"io"
+	"mime/multipart"
 	"net/url"
 	"reflect"
 	"strings"
@@ -10,27 +12,39 @@ import (
 type urlValueBinder struct {
 	values url.Values
 	keys   []string
+	files  map[string][]*multipart.FileHeader
 }
 
-func NewUrlValueBinder(values url.Values) Binder {
-	binder := &urlValueBinder{values: values}
-	for k, _ := range values {
-		binder.keys = append(binder.keys, k)
+func GetBinderOfUrlValue(values url.Values, files map[string][]*multipart.FileHeader) Binder {
+	binder := &urlValueBinder{values: values, files: files}
+	for k, v := range values {
+		if len(v) > 0 {
+			binder.keys = append(binder.keys, k)
+		}
+	}
+	for k, v := range files {
+		if len(v) > 0 {
+			binder.keys = append(binder.keys, k)
+		}
 	}
 	return binder
 }
 
+func (b urlValueBinder) Name() string {
+	return "urlvalue"
+}
+
 func (b urlValueBinder) Get(key string) interface{} {
-	return nil
+	return b.values.Get(key)
 }
 
 func (b urlValueBinder) Bind(v reflect.Value, s reflect.StructField) error {
-	return nil
+	return b.bindValue(v, s, "")
 }
 
 func (b urlValueBinder) bindValue(v reflect.Value, s reflect.StructField, preKey string) (err error) {
-	var keys, bind, fullKey string
-	bind, keys = s.Tag.Get("bind"), s.Tag.Get("key")
+	var keys, required, skey, ckey string
+	required, keys = s.Tag.Get("required"), s.Tag.Get("key")
 	if keys == "" {
 		keys = s.Name
 	}
@@ -40,24 +54,32 @@ func (b urlValueBinder) bindValue(v reflect.Value, s reflect.StructField, preKey
 	}
 
 	for _, v := range strings.Split(keys, ",") {
-		foo := strings.TrimSpace(v)
+		ckey = strings.TrimSpace(v)
 		if preKey != "" {
-			foo = preKey + "[" + foo + "]"
-		}
-		for _, ikey := range b.keys {
-			if ikey == foo {
-				fullKey = ikey
-				break
+			ckey = preKey + "[" + ckey + "]"
+			for _, ikey := range b.keys {
+				if strings.HasPrefix(ikey, ckey) {
+					skey = ikey
+					break
+				}
+			}
+		} else {
+			for _, ikey := range b.keys {
+				if ikey == ckey {
+					skey = ikey
+					break
+				}
 			}
 		}
 	}
-	if fullKey == "" {
+
+	if skey == "" {
 		if defaultValue := s.Tag.Get("default"); defaultValue != "" {
 			if err = setValWithString(v, s, defaultValue); err != nil {
-				return errors.New("input field <" + fullKey + "> " + err.Error())
+				return errors.New("input: " + ckey + " <" + s.Tag.Get("note") + "> " + err.Error())
 			}
-		} else if bind == "required" {
-			return errors.New("input field <" + fullKey + "> is required")
+		} else if required == "true" {
+			return errors.New("input: " + ckey + " <" + s.Tag.Get("note") + "> is required")
 		}
 		return nil
 	}
@@ -65,14 +87,33 @@ func (b urlValueBinder) bindValue(v reflect.Value, s reflect.StructField, preKey
 	switch s.Type.Kind() {
 	case reflect.Struct:
 		if s.Type.String() == "time.Time" {
-			return setValWithString(v, s, b.values.Get(fullKey))
+			return setValWithString(v, s, b.values.Get(skey))
 		} else {
-			return b.bindStructWithUrlValue(v, fullKey)
+			return b.bindStructWithUrlValue(v, ckey)
 		}
 	case reflect.Slice:
-		return b.bindSlice(v, s, fullKey)
+		vType := v.Type().String()
+		if (vType == "[]uint8" || vType == "[]byte" || vType == "[]int8") && b.files != nil {
+			if fhs := b.files[skey]; len(fhs) > 0 {
+				var f multipart.File
+				if f, err = fhs[0].Open(); err != nil {
+					return err
+				}
+				defer f.Close()
+				buffer := make([]byte, fhs[0].Size)
+				if _, err := io.ReadFull(f, buffer); err != nil {
+					return err
+				}
+				v.Set(reflect.ValueOf(buffer))
+				return nil
+			} else {
+				return errors.New("input: " + ckey + " <" + s.Tag.Get("note") + "> is required []byte or []int8")
+			}
+		} else {
+			return b.bindSlice(v, s, ckey)
+		}
 	default:
-		return setValWithString(v, s, b.values.Get(fullKey))
+		return setValWithString(v, s, b.values.Get(skey))
 	}
 }
 
@@ -86,10 +127,10 @@ func (b urlValueBinder) bindStructWithUrlValue(v reflect.Value, preKey string) (
 	return
 }
 
-func (b urlValueBinder) bindSlice(v reflect.Value, s reflect.StructField, preKey string) (err error) {
-	if s.Type.Kind() == reflect.Struct {
-		var keyList = make(map[string]struct{}, 8)
-		for k, _ := range b.values {
+func (b urlValueBinder) bindSlice(vField reflect.Value, s reflect.StructField, preKey string) (err error) {
+	if s.Type.Elem().Kind() == reflect.Struct {
+		var keyList = map[string]struct{}{}
+		for k := range b.values {
 			if strings.HasPrefix(k, preKey) {
 				if preKey, err := parseSliceKey(k, preKey); err != nil {
 					return err
@@ -98,20 +139,19 @@ func (b urlValueBinder) bindSlice(v reflect.Value, s reflect.StructField, preKey
 				}
 			}
 		}
-
 		for k := range keyList {
-			v := reflect.Indirect(reflect.New(v.Type().Elem()))
-			if err = b.bindValue(v, s, k); err != nil {
+			v := reflect.Indirect(reflect.New(vField.Type().Elem()))
+			if err = b.bindStructWithUrlValue(v, k); err != nil {
 				return err
 			}
-			v.Set(reflect.Append(v, v))
+			vField.Set(reflect.Append(vField, v))
 		}
 	} else {
 		for _, val := range b.values[preKey] {
-			if elem, err := appendElem(v, s, val, nil); err != nil {
-				return errors.New("input <" + preKey + "> " + err.Error())
+			if elem, err := appendElem(vField, s, val, nil); err != nil {
+				return errors.New("input: " + preKey + " <" + s.Tag.Get("note") + "> " + err.Error())
 			} else {
-				v.Set(elem)
+				vField.Set(elem)
 			}
 		}
 	}

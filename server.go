@@ -3,42 +3,49 @@ package play
 import (
 	"net"
 	"net/http"
-	"reflect"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/leochen2038/play/codec/binder"
-	"github.com/leochen2038/play/codec/render"
+	"github.com/leochen2038/play/codec/binders"
+	"github.com/lucas-clemente/quic-go"
+)
+
+const (
+	SERVER_TYPE_HTTP  = 1
+	SERVER_TYPE_TCP   = 2
+	SERVER_TYPE_SSE   = 3
+	SERVER_TYPE_WS    = 4
+	SERVER_TYPE_H2C   = 5
+	SERVER_TYPE_QUIC  = 6
+	SERVER_TYPE_HTTP3 = 7
 )
 
 type IServerHook interface {
+	OnBoot(server IServer)
+	OnShutdown(server IServer)
 	OnConnect(sess *Session, err error)
 	OnClose(sess *Session, err error)
 
 	OnRequest(ctx *Context) error
-	OnResponse(ctx *Context) error
-	OnFinish(ctx *Context) error
+	OnResponse(ctx *Context)
+	OnFinish(ctx *Context)
 }
 
 type IServer interface {
 	Info() InstanceInfo
 	Ctrl() *InstanceCtrl
 	Hook() IServerHook
-	Transport() ITransport
-
-	Run(net.Listener) error
+	Packer() IPacker
+	Transport(*Conn, []byte) error
+	Network() string
+	Run(net.Listener, net.PacketConn) error
 	Close()
 }
 
-type Binder interface {
-	Bind(v reflect.Value) error
-	Get(key string) (interface{}, error)
-	Set(key string, val interface{})
-}
-
-type ITransport interface {
+type IPacker interface {
 	Receive(c *Conn) (*Request, error)
-	Send(c *Conn, res *Response) error
+	Pack(c *Conn, res *Response) ([]byte, error)
 }
 
 type InstanceInfo struct {
@@ -62,6 +69,7 @@ func (c *InstanceCtrl) WaitTask() {
 }
 
 type Conn struct {
+	Type    int
 	IsClose bool
 	Http    struct {
 		Request        *http.Request
@@ -77,26 +85,32 @@ type Conn struct {
 		Surplus []byte
 		Conn    net.Conn
 	}
+	Quic struct {
+		Version byte
+		Conn    quic.Connection
+		Stream  quic.Stream
+	}
 }
 
 type Request struct {
-	Version      byte
-	Render       string
-	Caller       string
-	TagId        int
-	TraceId      string
-	SpanId       []byte
-	Respond      bool
-	ActionName   string
-	InputBinder  binder.Binder
-	OutputRender render.Render
+	Version     byte
+	RenderName  string
+	CallerId    int
+	TagId       int
+	TraceId     string
+	SpanId      []byte
+	NonRespond  bool
+	ActionName  string
+	Attach      []byte
+	Deadline    time.Time
+	InputBinder binders.Binder
 }
 
 type Response struct {
-	ErrorCode    int
-	TagId        int
-	TraceId      string
-	SpanId       []byte
-	Template     string
-	OutputRender Output
+	Version    byte
+	TraceId    string
+	Template   string
+	RenderName string
+	Error      error
+	Output     Output
 }

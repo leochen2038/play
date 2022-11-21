@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/leochen2038/play/goplay/reconst/env"
+	"github.com/leochen2038/play/goplay/env"
 )
 
 var registerCode string
@@ -22,15 +22,23 @@ func ReconstAction() (err error) {
 	if err != nil {
 		return err
 	}
-	registerCode = "func init() {\n"
+	registerCode = "func init() {\nsetBuildBasePath()\n"
 	registerCode += genRegisterCronCode(env.ProjectPath + "/crontab")
 	for _, action := range actions {
 		emptyAction = false
-		registerCode += "\tplay.RegisterAction(\"" + action.name + "\", " + "func()interface{}{return "
+		metaData := genActionMetaStruct(action.metaData)
+		registerCode += "\tplay.RegisterAction(\"" + action.name + "\", " + metaData + ", func()interface{}{return "
 		genNextProcessorCode(action.handlerList, &action)
 		registerCode = registerCode[:len(registerCode)-1] + "})\n"
 	}
-	registerCode += "}"
+	registerCode += "}\n\n"
+	registerCode += `func setBuildBasePath() {
+	if _, file, _, ok := runtime.Caller(0); ok {
+		if strings.LastIndex(file, "/") > 0 {
+			play.BuildBasePath = file[:strings.LastIndex(file, "/")+1]
+		}
+	}
+}`
 
 	if err = updateRegister(env.ProjectPath, env.FrameworkName, emptyAction); err != nil {
 		return
@@ -42,6 +50,18 @@ func ReconstAction() (err error) {
 	//}
 
 	return
+}
+
+func genActionMetaStruct(metaData map[string]string) string {
+	var metaStruct string = `map[string]string{`
+	for k, v := range metaData {
+		metaStruct += fmt.Sprintf("\"%s\":\"%s\",", k, v)
+	}
+	if len(metaData) > 0 {
+		metaStruct = metaStruct[:len(metaStruct)-1]
+	}
+	metaStruct = metaStruct + "}"
+	return metaStruct
 }
 
 func genRegisterCronCode(path string) (registCode string) {
@@ -122,6 +142,8 @@ func updateRegister(project, frameworkName string, emptyAction bool) (err error)
 	for k, v := range packages {
 		src += fmt.Sprintf("\t%s \"%s/processor/%s\"\n", v, module, k)
 	}
+	src += "\"runtime\"\n"
+	src += "\"strings\"\n"
 	if len(packages) > 0 {
 		src += "\"unsafe\"\n"
 	}

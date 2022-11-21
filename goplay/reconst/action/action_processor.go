@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/leochen2038/play/goplay/reconst/env"
+	"github.com/leochen2038/play/goplay/env"
 )
 
 func checkProcessorFile(name string) (err error) {

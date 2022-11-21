@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/config"
+	"github.com/leochen2038/play/database"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -18,22 +18,22 @@ import (
 
 var dbconnects sync.Map
 
-func getConnect(ctx context.Context, router string) (*mongo.Client, error) {
+func GetConnect(ctx context.Context, router string) (*mongo.Client, error) {
 	var err error
 	var mongoURI string
 	var dest string
 	var dbconnect *mongo.Client
 
-	if dest, err = config.String(router); err != nil {
-		return nil, fmt.Errorf("can not find mongodb config:" + router)
+	if dest = database.GetDest(router); dest == "" {
+		return nil, fmt.Errorf("can not find mongodb config: " + router)
 	}
 	if connect, _ := dbconnects.Load(dest); connect == nil {
 		scheme := "mongodb"
-		username, password, host, _ := play.DecodeHost(scheme, dest)
-		if username == "" {
-			mongoURI = scheme + "://" + host
+		r := database.GetRouter(router)
+		if r.Username == "" {
+			mongoURI = scheme + "://" + r.Host + ":" + r.Port
 		} else {
-			mongoURI = scheme + "://" + username + ":" + password + "@" + host
+			mongoURI = scheme + "://" + r.Username + ":" + r.Password + "@" + r.Host + ":" + r.Port
 		}
 
 		if dbconnect, err = mongo.NewClient(options.Client().ApplyURI(mongoURI).SetMaxPoolSize(1024)); err != nil {
@@ -56,7 +56,7 @@ func getConnect(ctx context.Context, router string) (*mongo.Client, error) {
 
 func getCollection(query *play.Query) (collection *mongo.Collection, err error) {
 	var client *mongo.Client
-	if client, err = getConnect(context.Background(), query.Router); err != nil {
+	if client, err = GetConnect(context.Background(), query.Router); err != nil {
 		return nil, err
 	}
 	collection = client.Database(query.DBName).Collection(query.Table)
@@ -274,7 +274,7 @@ func findOptions(query *play.Query) *options.FindOptions {
 			if query.Order[i][1] == "desc" {
 				sort = -1
 			}
-			sortFields = append(sortFields, bson.E{query.Order[i][0], sort})
+			sortFields = append(sortFields, bson.E{Key: query.Order[i][0], Value: sort})
 		}
 		options.SetSort(sortFields)
 	}
@@ -294,7 +294,7 @@ func findOneOptions(query *play.Query) *options.FindOneOptions {
 			if query.Order[i][1] == "desc" {
 				sort = -1
 			}
-			sortFields = append(sortFields, bson.E{query.Order[i][0], sort})
+			sortFields = append(sortFields, bson.E{Key: query.Order[i][0], Value: sort})
 		}
 		options.SetSort(sortFields)
 	}
@@ -327,11 +327,11 @@ func fetch(query *play.Query) bson.M {
 				if reflect.TypeOf(cond.Val).String() == "[]interface {}" {
 					list := make([]primitive.ObjectID, 0, 1)
 					for _, v := range cond.Val.([]interface{}) {
-						switch v.(type) {
+						switch v := v.(type) {
 						case primitive.ObjectID:
-							list = append(list, v.(primitive.ObjectID))
+							list = append(list, v)
 						case string:
-							obj, _ := primitive.ObjectIDFromHex(v.(string))
+							obj, _ := primitive.ObjectIDFromHex(v)
 							list = append(list, obj)
 						}
 					}
@@ -351,11 +351,11 @@ func fetch(query *play.Query) bson.M {
 				if reflect.TypeOf(cond.Val).String() == "[]interface {}" {
 					list := make([]primitive.ObjectID, 0, 1)
 					for _, v := range cond.Val.([]interface{}) {
-						switch v.(type) {
+						switch v := v.(type) {
 						case primitive.ObjectID:
-							list = append(list, v.(primitive.ObjectID))
+							list = append(list, v)
 						case string:
-							obj, _ := primitive.ObjectIDFromHex(v.(string))
+							obj, _ := primitive.ObjectIDFromHex(v)
 							list = append(list, obj)
 						}
 					}
@@ -368,7 +368,6 @@ func fetch(query *play.Query) bson.M {
 			}
 		case "Like":
 			regex := (cond.Val).(string)
-			strings.ReplaceAll(regex, "%", ".*")
 			fieldCon["$regex"] = strings.ReplaceAll(regex, "%", ".*")
 			fieldCon["$options"] = "i"
 		}

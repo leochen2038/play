@@ -12,26 +12,26 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/leochen2038/play"
-	"github.com/leochen2038/play/config"
+	"github.com/leochen2038/play/database"
 )
 
 var dbconnects sync.Map
 
-func getConnect(router string) (*sql.DB, error) {
+func GetConnect(router string) (*sql.DB, error) {
 	var err error
 	var dest string
 	var dbconnect *sql.DB
 
-	if dest, err = config.String(router); err != nil {
-		return nil, fmt.Errorf("can not find mysql config")
+	if dest = database.GetDest(router); dest == "" {
+		return nil, fmt.Errorf("can not find mysql router:" + router)
 	}
 
 	if connect, _ := dbconnects.Load(dest); connect == nil {
 		if dbconnect, err = sql.Open("mysql", dest); err != nil {
-			return nil, fmt.Errorf("can not find open mysql | %w", err)
+			return nil, fmt.Errorf("can not find open mysql, %w", err)
 		}
 		if err = dbconnect.Ping(); err != nil {
-			return nil, fmt.Errorf("can not find ping mysql host | %w", err)
+			return nil, fmt.Errorf("can not find ping mysql host: %s , %w", dest, err)
 		}
 
 		if connect, ok := dbconnects.LoadOrStore(dest, dbconnect); ok {
@@ -50,7 +50,7 @@ func getConnect(router string) (*sql.DB, error) {
 func GetList(dest interface{}, query *play.Query) (err error) {
 	var conn *sql.DB
 	var rows *sql.Rows
-	if conn, err = getConnect(query.Router); err != nil {
+	if conn, err = GetConnect(query.Router); err != nil {
 		return
 	}
 
@@ -68,10 +68,20 @@ func GetList(dest interface{}, query *play.Query) (err error) {
 	return
 }
 
+// func Statement(dest interface{}, query *play.Query) string {
+// 	fields := fieldstext(dest)
+// 	where, values := condtext(query)
+// 	statement := "SELECT " + fields + " FROM " + query.DBName + "." + query.Table + where
+// 	for k, v := range values {
+// 		statement = strings.Replace(statement, "?"+strconv.Itoa(k), fmt.Sprintf("%v", v), 1)
+// 	}
+// 	return statement
+// }
+
 func QueryMap(router, sqlStr string, args ...interface{}) (result []map[string]interface{}, err error) {
 	var conn *sql.DB
 	var rows *sql.Rows
-	if conn, err = getConnect(router); err != nil {
+	if conn, err = GetConnect(router); err != nil {
 		return
 	}
 	rows, err = conn.Query(sqlStr, args...)
@@ -105,7 +115,7 @@ func QueryMap(router, sqlStr string, args ...interface{}) (result []map[string]i
 func GetOne(dest interface{}, query *play.Query) (err error) {
 	var conn *sql.DB
 	var rows *sql.Rows
-	if conn, err = getConnect(query.Router); err != nil {
+	if conn, err = GetConnect(query.Router); err != nil {
 		return
 	}
 
@@ -113,6 +123,7 @@ func GetOne(dest interface{}, query *play.Query) (err error) {
 	where, values := condtext(query)
 
 	rows, err = conn.Query("SELECT "+fields+" FROM "+query.DBName+"."+query.Table+where, values...)
+
 	if err != nil {
 		return
 	}
@@ -148,25 +159,25 @@ func fieldstext(dest interface{}) string {
 
 func placeholders(v interface{}) string {
 	var n int
-	switch v.(type) {
+	switch v := v.(type) {
 	case []interface{}:
-		n = len(v.([]interface{}))
+		n = len(v)
 	case []int:
-		n = len(v.([]int))
+		n = len(v)
 	case []int8:
-		n = len(v.([]int8))
+		n = len(v)
 	case []int16:
-		n = len(v.([]int16))
+		n = len(v)
 	case []int32:
-		n = len(v.([]int32))
+		n = len(v)
 	case []int64:
-		n = len(v.([]int64))
+		n = len(v)
 	case []float32:
-		n = len(v.([]float32))
+		n = len(v)
 	case []float64:
-		n = len(v.([]float64))
+		n = len(v)
 	case []string:
-		n = len(v.([]string))
+		n = len(v)
 	}
 
 	var b strings.Builder
@@ -440,7 +451,7 @@ func traversalsByName(t reflect.Type, names []string) ([]int, error) {
 func Count(query *play.Query) (count int64, err error) {
 	var conn *sql.DB
 	var rows *sql.Rows
-	if conn, err = getConnect(query.Router); err != nil {
+	if conn, err = GetConnect(query.Router); err != nil {
 		return
 	}
 
@@ -461,22 +472,19 @@ func Count(query *play.Query) (count int64, err error) {
 func Update(query *play.Query) (modcount int64, err error) {
 	var conn *sql.DB
 	var res sql.Result
-	if conn, err = getConnect(query.Router); err != nil {
+	if conn, err = GetConnect(query.Router); err != nil {
 		return
 	}
 
 	values := make([]interface{}, 0, len(query.Conditions)+len(query.Sets))
 
 	update, value := updatetext(query)
-	for _, v := range value {
-		values = append(values, v)
-	}
+	values = append(values, value...)
 
 	where, value := condtext(query)
-	for _, v := range value {
-		values = append(values, v)
-	}
+	values = append(values, value...)
 
+	fmt.Println("UPDATE "+query.DBName+"."+query.Table+update+where, values)
 	res, err = conn.Exec("UPDATE "+query.DBName+"."+query.Table+update+where, values...)
 	if err != nil {
 		return
@@ -492,8 +500,18 @@ func updatetext(query *play.Query) (string, []interface{}) {
 	fields := make([]string, 0, len(query.Sets)+1)
 	find := false
 	for field, v := range query.Sets {
-		fields = append(fields, field+" = ?")
-		values = append(values, v[0])
+		if len(v) == 2 {
+			if v[1] == "@+" {
+				fields = append(fields, field+" = "+field+" + ?")
+				values = append(values, v[0])
+			} else if v[1] == "@-" {
+				fields = append(fields, field+" = "+field+" - ?")
+				values = append(values, v[0])
+			}
+		} else {
+			fields = append(fields, field+" = ?")
+			values = append(values, v[0])
+		}
 		if field == "Fmtime" {
 			find = true
 		}
@@ -511,7 +529,7 @@ func updatetext(query *play.Query) (string, []interface{}) {
 func Delete(query *play.Query) (delcount int64, err error) {
 	var conn *sql.DB
 	var res sql.Result
-	if conn, err = getConnect(query.Router); err != nil {
+	if conn, err = GetConnect(query.Router); err != nil {
 		return
 	}
 
@@ -530,7 +548,7 @@ func Save(meta interface{}, query *play.Query) (id int64, err error) {
 	var conn *sql.DB
 	var res sql.Result
 
-	if conn, err = getConnect(query.Router); err != nil {
+	if conn, err = GetConnect(query.Router); err != nil {
 		return
 	}
 

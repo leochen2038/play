@@ -3,7 +3,6 @@ package action
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -210,6 +209,5 @@ func parseTokenFrom(reader *bytes.Reader, filename string) ([]string, error) {
 			token = append(token, c)
 		}
 	}
-	fmt.Println("token:", tokens)
 	return tokens, nil
 }
