@@ -26,6 +26,10 @@ func init() {
 	tracPrefix = fmt.Sprintf("trac-%03d-", i)
 }
 
+func NewTraceId() string {
+	return Generate23Id(tracPrefix, "")
+}
+
 type actionRequest struct {
 	CallerId    int
 	Name        string
@@ -64,7 +68,7 @@ func NewPlayContext(parent context.Context, s *Session, request *Request, timeou
 	if request.TraceId != "" {
 		traceId = request.TraceId
 	} else {
-		traceId = Generate23Id(tracPrefix, "")
+		traceId = NewTraceId()
 	}
 	if !request.Deadline.IsZero() {
 		if t := time.Until(request.Deadline); t < timeout {

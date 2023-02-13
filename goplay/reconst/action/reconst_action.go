@@ -136,7 +136,7 @@ func updateRegister(project, frameworkName string, emptyAction bool) (err error)
 	if len(crontab) > 0 || len(packages) > 0 || !emptyAction {
 		src += "import (\n\t\"" + frameworkName + "\"\n"
 	}
-	for k, _ := range crontab {
+	for k := range crontab {
 		src += fmt.Sprintf("\t\"%s/%s\"\n", module, k)
 	}
 	for k, v := range packages {

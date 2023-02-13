@@ -77,6 +77,7 @@ func (i *httpInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if i.ws != nil {
 		if conn, _ := i.ws.update(w, r); conn != nil {
 			sess.Server = i.ws
+			sess.Conn.Type = play.SERVER_TYPE_WS
 			sess.Conn.Websocket.WebsocketConn = conn
 			i.ws.accept(sess)
 			return

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -135,10 +136,9 @@ func fileHandler(ts time.Time) *os.File {
 	var file *os.File
 	var err error
 	var loaded bool
-	var date = ts.Format("2006-01-02")
-	var filename = fmt.Sprintf("%s.log.%s", exeName, date)
+	var filename = exeName + ".log." + ts.Format("2006-01-02")
 
-	if file, ok := logfile.Load(date); ok {
+	if file, ok := logfile.Load(filename); ok {
 		return file.(*os.File)
 	}
 
@@ -146,11 +146,12 @@ func fileHandler(ts time.Time) *os.File {
 		return nil
 	}
 
-	if actual, loaded = logfile.LoadOrStore(date, file); loaded {
+	if actual, loaded = logfile.LoadOrStore(filename, file); loaded {
 		file.Close()
 	}
 
-	// 只保留两天的日志
+	// 只保留最新三份日志
+	logs := make([]os.FileInfo, 0)
 	if dir, err := os.Open(path.Dir(exeName)); err == nil {
 		list, _ := dir.ReadDir(0)
 		for _, f := range list {
@@ -158,13 +159,21 @@ func fileHandler(ts time.Time) *os.File {
 				continue
 			}
 			if info, _ := f.Info(); info != nil {
-				if strings.HasPrefix(info.Name(), fmt.Sprintf("%s.log.", path.Base(exeName))) && info.ModTime().Before(ts.Add(-time.Hour*48)) {
-					if f, ok := logfile.LoadAndDelete(info.ModTime().Format("2006-01-02")); ok {
-						f.(*os.File).Close()
-					}
-					os.Remove(path.Join(path.Dir(exeName), info.Name()))
+				if strings.HasPrefix(info.Name(), fmt.Sprintf("%s.log.20", path.Base(exeName))) {
+					logs = append(logs, info)
 				}
 			}
+		}
+
+		sort.Slice(logs, func(i, j int) bool {
+			return logs[i].ModTime().After(logs[j].ModTime())
+		})
+
+		for i := 3; i < len(logs); i++ {
+			if f, ok := logfile.LoadAndDelete(logs[i].Name()); ok {
+				f.(*os.File).Close()
+			}
+			os.Remove(path.Join(path.Dir(exeName), logs[i].Name()))
 		}
 	}
 

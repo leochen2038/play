@@ -48,9 +48,9 @@ func parseModuleName(path string) (string, error) {
 		return "", errors.New("can not find go.mod in project")
 	}
 
-	file, err := os.Open(modPath)
+	file, _ := os.Open(modPath)
 	br := bufio.NewReader(file)
-	data, _, err := br.ReadLine()
+	data, _, _ := br.ReadLine()
 
 	return strings.Split(string(data), " ")[1], nil
 }

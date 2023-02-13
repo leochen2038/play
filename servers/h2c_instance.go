@@ -51,7 +51,7 @@ func (i *h2cInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 	defer func() {
 		if r.MultipartForm != nil {
-		    r.MultipartForm.RemoveAll()
+			r.MultipartForm.RemoveAll()
 		}
 		i.hook.OnClose(sess, err)
 	}()

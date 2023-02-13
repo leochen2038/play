@@ -3,17 +3,18 @@ package agents
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"io"
 	"sync"
 
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/codec/protos/golang/json"
 	"github.com/leochen2038/play/codec/protos/pproto"
-	"github.com/leochen2038/play/config"
 	"github.com/lucas-clemente/quic-go"
 )
 
-var quicConnetions = sync.Map{}
+var callerId int = 0
+var quicRouter = sync.Map{}
 
 type quicPProtoAgent struct {
 	addr       string
@@ -22,37 +23,46 @@ type quicPProtoAgent struct {
 	config     *quic.Config
 }
 
-func GetQuicPProtoAgent(host string, nextProtos []string, config *quic.Config) (agent *quicPProtoAgent, err error) {
-	if agent, ok := quicConnetions.Load(host); ok {
-		return agent.(*quicPProtoAgent), nil
-	}
+func SetCallerId(id int) {
+	callerId = id
+}
+
+func SetQuicRouter(name string, host string, nextProtos []string, config *quic.Config) {
 	if len(nextProtos) == 0 {
 		nextProtos = []string{"quicServer"}
 	}
-	connection, err := content(host, nextProtos, config)
-	if err != nil {
-		return nil, err
-	}
-	agent = &quicPProtoAgent{
+	quicRouter.Store(name, &quicPProtoAgent{
 		addr:       host,
 		nextProtos: nextProtos,
 		config:     config,
-		connection: connection,
-	}
-	quicConnetions.Store(host, agent)
-	return agent, nil
+		connection: nil,
+	})
 }
 
-func (q *quicPProtoAgent) getStream() (quic.Stream, error) {
-	var err error
-	var stream quic.Stream
-	if stream, err = q.connection.OpenStreamSync(context.Background()); err != nil {
-		if connection, err := content(q.addr, q.nextProtos, q.config); err != nil {
-			return nil, err
-		} else {
-			q.connection = connection
-			return q.connection.OpenStreamSync(context.Background())
+func GetQuicPProtoAgent(name string) (agent *quicPProtoAgent, err error) {
+	if i, ok := quicRouter.Load(name); !ok {
+		return nil, errors.New("not found agent by:" + name)
+	} else {
+		agent = i.(*quicPProtoAgent)
+		if agent.connection == nil {
+			agent.connection, err = content(agent.addr, agent.nextProtos, agent.config)
 		}
+	}
+
+	return agent, err
+}
+
+func (q *quicPProtoAgent) getStream(ctx context.Context) (stream quic.Stream, err error) {
+	if q.connection == nil {
+		if q.connection, err = content(q.addr, q.nextProtos, q.config); err != nil {
+			return nil, errors.New("connect to " + q.addr + " error:" + err.Error())
+		}
+	}
+	if stream, err = q.connection.OpenStreamSync(ctx); err != nil {
+		if q.connection, err = content(q.addr, q.nextProtos, q.config); err != nil {
+			return nil, errors.New("connect after open stream err " + q.addr + " error:" + err.Error())
+		}
+		stream, err = q.connection.OpenStreamSync(ctx)
 	}
 	return stream, err
 }
@@ -69,17 +79,23 @@ func (a *quicPProtoAgent) Request(ctx context.Context, service string, action st
 	var err error
 	var stream quic.Stream
 
-	if stream, err = a.getStream(); err != nil {
+	if stream, err = a.getStream(ctx); err != nil {
 		return nil, err
 	}
 	defer stream.Close()
-
+	if deadline, ok := ctx.Deadline(); ok {
+		stream.SetDeadline(deadline)
+	}
 	if _, err = stream.Write(body); err != nil {
-		return nil, err
+		return nil, errors.New("write to " + a.addr + " error:" + err.Error())
 	}
 	var heaer = make([]byte, 8)
 	if _, err = io.ReadFull(stream, heaer); err != nil {
-		return nil, err
+		var traceId string
+		if c, ok := ctx.(*play.Context); ok {
+			traceId = c.Trace.TraceId
+		}
+		return nil, errors.New("traceId:" + traceId + ". read header from " + a.addr + " error:" + err.Error())
 	}
 
 	dataSize := _bytesToUint32(heaer[4:8])
@@ -93,19 +109,9 @@ func (a *quicPProtoAgent) Request(ctx context.Context, service string, action st
 }
 
 func (a *quicPProtoAgent) Marshal(ctx context.Context, service string, action string, i interface{}) ([]byte, error) {
-	var err error
-	var body []byte
-
-	if body, err = json.Marshal(i); err != nil {
+	request, err := pproto.NewPlayProtocolRequest(ctx, callerId, action, i)
+	if err != nil {
 		return nil, err
-	}
-
-	request := pproto.PlayProtocolRequest{Action: action, Body: body}
-	request.Header.CallerId, _ = config.Int("appid")
-	if c, ok := ctx.(*play.Context); ok {
-		c.Trace.SpanId++
-		request.Header.TraceId = c.Trace.TraceId
-		request.Header.SpanId = append(c.Trace.ParentSpanId, c.Trace.SpanId)
 	}
 	return pproto.MarshalProtocolRequest(request)
 }

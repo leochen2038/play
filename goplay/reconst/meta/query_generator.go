@@ -41,6 +41,7 @@ type MetaField struct {
 
 type MetaStrategy struct {
 	Storage MetaStorage `xml:"storage"`
+	Hook    MetaHook    `xml:"hook"`
 }
 
 type MetaStorage struct {
@@ -49,6 +50,12 @@ type MetaStorage struct {
 	Database string `xml:"database,attr"`
 	Table    string `xml:"table,attr"`
 	Router   string `xml:"router,attr"`
+}
+
+type MetaHook struct {
+	Params  []string `xml:"param,attr"`
+	Handle  string   `xml:"handle,attr"`
+	Package string   `xml:"package,attr"`
 }
 
 func MetaGenerator() (err error) {
@@ -62,7 +69,7 @@ func MetaGenerator() (err error) {
 				return err
 			}
 			if err = xml.Unmarshal(data, &meta); err != nil {
-				return errors.New("check: " + filename + " failure:" + err.Error())
+				return errors.New("check: " + filename + " failure: " + err.Error())
 			}
 
 			if err = writeMeta(meta); err != nil {
@@ -101,6 +108,15 @@ func generateQueryCode(meta Meta) string {
 	conslice := [...]string{"In", "NotIn"}
 
 	funcName := formatUcfirstName(meta.Module) + formatUcfirstName(meta.Name)
+
+	hookPage := ""
+	if meta.Strategy.Hook.Package != "" {
+		hookPage = "\"" + meta.Strategy.Hook.Package + "\""
+		if len(meta.Strategy.Hook.Params) > 0 {
+			hookPage += "\n\t\"errors\""
+		}
+
+	}
 	src := "package db\n"
 	if meta.Strategy.Storage.Type == "mongodb" {
 		if meta.Strategy.Storage.Drive == "" || meta.Strategy.Storage.Drive == "default" {
@@ -110,24 +126,26 @@ func generateQueryCode(meta Meta) string {
 			src += fmt.Sprintf(`
 import (
 	"context"
+	%s
 	"%s"
 	"%s/library/metas"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"%s/database/mongodb"
 	"time"
 )
-`, env.FrameworkName, env.ModuleName, env.FrameworkName)
+`, hookPage, env.FrameworkName, env.ModuleName, env.FrameworkName)
 		} else {
 			src += fmt.Sprintf(`
 import (
 	"context"
+	%s
 	"%s"
 	"%s/library/metas"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	mongodb "%s"
 	"time"
 )
-`, env.FrameworkName, env.ModuleName, meta.Strategy.Storage.Drive)
+`, hookPage, env.FrameworkName, env.ModuleName, meta.Strategy.Storage.Drive)
 			meta.Strategy.Storage.Drive = "mongodb"
 		}
 	} else {
@@ -138,20 +156,22 @@ import (
 			src += fmt.Sprintf(`
 import (
 	"context"
+	%s
 	"%s"
 	"%s/library/metas"
 	"%s/database/mysql"
 )
-`, env.FrameworkName, env.ModuleName, env.FrameworkName)
+`, hookPage, env.FrameworkName, env.ModuleName, env.FrameworkName)
 		} else {
 			src += fmt.Sprintf(`
 import (
 	"context"
+	%s
 	"%s"
 	"%s/library/metas"
 	mysql "%s"
 )
-`, env.FrameworkName, env.ModuleName, meta.Strategy.Storage.Drive)
+`, hookPage, env.FrameworkName, env.ModuleName, meta.Strategy.Storage.Drive)
 			meta.Strategy.Storage.Drive = "mysql"
 		}
 	}
@@ -184,6 +204,7 @@ func %s(c context.Context) *query%s {
 	obj.QueryInfo.Context = c
 	obj.QueryInfo.Sets = map[string][]interface{}{}
 	obj.QueryInfo.Fields = map[string]struct{}{%s}
+	obj.QueryInfo.Init()
 	return obj
 }
 `, funcName, meta.Note, funcName, funcName, funcName, meta.Module, meta.Name, meta.Strategy.Storage.Database, meta.Strategy.Storage.Table, meta.Strategy.Storage.Router, initFields)
@@ -335,10 +356,14 @@ func (q *query%s)UpdateAndGetOne() (*metas.%s, error) {
 		src += fmt.Sprintf(`
 func (q *query%s)GetOne() (*metas.%s, error) {
 	m := &metas.%s{}
+`, funcName, funcName, funcName)
+		src += genHookCode(meta, "GetOne", "nil")
+		src += fmt.Sprintf(`
 	if err := %s.GetOne(m, &q.QueryInfo); err != nil {
 		return nil, err 
 	}
-`, funcName, funcName, funcName, meta.Strategy.Storage.Drive)
+`, meta.Strategy.Storage.Drive)
+
 		for k, v := range arrayFieldList {
 			src += fmt.Sprintf(
 				`if metas.%s == nil {
@@ -354,19 +379,27 @@ func (q *query%s)GetOne() (*metas.%s, error) {
 		src += fmt.Sprintf(`
 func (q *query%s)GetOne() (*metas.%s, error) {
 	m := &metas.%s{}
+`, funcName, funcName, funcName)
+		src += genHookCode(meta, "GetOne", "nil")
+		src += fmt.Sprintf(`
 	if err := %s.GetOne(m, &q.QueryInfo); err != nil {
 		return nil, err 
 	}
 	return m, nil
 }
-`, funcName, funcName, funcName, meta.Strategy.Storage.Drive)
+`, meta.Strategy.Storage.Drive)
 	}
 
 	src += fmt.Sprintf(`
 func (q *query%s)GetList() ([]metas.%s, error) {
 	list := make([]metas.%s, 0)
+`, funcName, funcName, funcName)
+
+	src += genHookCode(meta, "GetList", "list")
+	src += fmt.Sprintf(`
 	err := %s.GetList(&list, &q.QueryInfo)
-`, funcName, funcName, funcName, meta.Strategy.Storage.Drive)
+`, meta.Strategy.Storage.Drive)
+
 	if len(arrayFieldList) > 0 {
 		src += fmt.Sprintf(`
 	for _, v:= range list {
@@ -395,6 +428,9 @@ func (q *query%s)GetList() ([]metas.%s, error) {
 
 		src += fmt.Sprintf(`
 func (q *query%s)Save(m *metas.%s) error {
+`, funcName, funcName)
+		src += genHookSaveCode(meta)
+		src += fmt.Sprintf(`
 	%s
 	if m.Id != primitive.NilObjectID {
 		return %s.Save(m, &m.Id, &q.QueryInfo)
@@ -404,31 +440,40 @@ func (q *query%s)Save(m *metas.%s) error {
 	m.Id = primitive.NewObjectID()
 	return %s.Save(m, nil, &q.QueryInfo)
 }
-`, funcName, funcName, msrc, meta.Strategy.Storage.Drive, csrc, meta.Strategy.Storage.Drive)
+`, msrc, meta.Strategy.Storage.Drive, csrc, meta.Strategy.Storage.Drive)
 	} else {
 		if meta.Key.Type == "auto" {
 			src += fmt.Sprintf(`
 func (q *query%s)Save(m *metas.%s) error {
+	`, funcName, funcName)
+			src += genHookSaveCode(meta)
+			src += fmt.Sprintf(`
 	id, err := %s.Save(m, &q.QueryInfo)
 	m.%s = int(id)
 	return err
 }
-`, funcName, funcName, meta.Strategy.Storage.Drive, formatUcfirstName(meta.Key.Name))
+`, meta.Strategy.Storage.Drive, formatUcfirstName(meta.Key.Name))
 		} else {
 			src += fmt.Sprintf(`
 func (q *query%s)Save(m *metas.%s) error {
+	`, funcName, funcName)
+			src += genHookSaveCode(meta)
+			src += fmt.Sprintf(`
 	_, err := %s.Save(m, &q.QueryInfo)
 	return err
 }
-`, funcName, funcName, meta.Strategy.Storage.Drive)
+`, meta.Strategy.Storage.Drive)
 		}
 	}
 
 	src += fmt.Sprintf(`
 func (q *query%s)Update() (int64, error) {
+`, funcName)
+	src += genHookCode(meta, "Update", "0")
+	src += fmt.Sprintf(`
 	return %s.Update(&q.QueryInfo)
 }
-`, funcName, meta.Strategy.Storage.Drive)
+`, meta.Strategy.Storage.Drive)
 
 	for _, field := range meta.Fields.List {
 		src += fmt.Sprintf(`
@@ -568,4 +613,86 @@ func ucfirst(str string) string {
 		return string(unicode.ToUpper(v)) + str[i+1:]
 	}
 	return ""
+}
+
+func genHookSaveCode(meta Meta) string {
+	var src, paramSrc string
+	if meta.Strategy.Hook.Handle != "" {
+		for _, v := range meta.Strategy.Hook.Params {
+			paramSrc += ", m." + formatUcfirstName(v)
+		}
+		paramSrc = strings.TrimRight(paramSrc, ", ")
+		src += fmt.Sprintf("if err := %s(\"%s\", &q.QueryInfo%s); err != nil {\n", meta.Strategy.Hook.Handle, "Save", paramSrc)
+		src += fmt.Sprintln("\t\treturn err")
+		src += fmt.Sprintln("\t}")
+	}
+	return src
+}
+
+func genHookCode(meta Meta, method string, ret string) string {
+	src := ""
+	if meta.Strategy.Hook.Handle != "" {
+		paramSrc := ""
+		if len(meta.Strategy.Hook.Params) > 0 {
+			src += "\tvar hookParams = map[string]interface{}{"
+			for _, v := range meta.Strategy.Hook.Params {
+				src += fmt.Sprintf(`"%s":nil,`, v)
+			}
+			src = strings.TrimRight(src, ",")
+			src += "\t}\n"
+
+			src += fmt.Sprintln("\tfor _, v := range q.QueryInfo.Conditions {")
+			for _, v := range meta.Strategy.Hook.Params {
+				var find bool
+				if meta.Key.Name == v {
+					var vt string
+					src += fmt.Sprintf("\t\tif v.Field == \"%s\" {\n", v)
+					src += fmt.Sprintln("\t\t\tif v.Con != \"Equal\" {")
+					src += fmt.Sprintf("\t\t\treturn %s, errors.New(\"query hook params not Equal: Fuid\")\n", ret)
+					src += fmt.Sprintln("\t\t\t}")
+					src += fmt.Sprintf("\t\t\thookParams[\"%s\"] = v.Val\n", v)
+					src += fmt.Sprintln("\t\t\tbreak\n\t\t}")
+					if meta.Key.Type == "auto" {
+						if meta.Strategy.Storage.Type == "mysql" {
+							vt = "int"
+						} else if meta.Strategy.Storage.Type == "mongodb" {
+							vt = "primitive.ObjectID"
+						}
+					} else {
+						vt = getGolangType(meta.Key.Type)
+					}
+
+					paramSrc += fmt.Sprintf(", hookParams[\"%s\"].(%s)", v, vt)
+					continue
+				}
+				for _, vb := range meta.Fields.List {
+					if vb.Name == v {
+						src += fmt.Sprintf("\t\tif v.Field == \"%s\" {\n", v)
+						src += fmt.Sprintln("\t\t\tif v.Con != \"Equal\" {")
+						src += fmt.Sprintf("\t\t\treturn %s, errors.New(\"query hook params not Equal: Fuid\")\n", ret)
+						src += fmt.Sprintln("\t\t\t}")
+						src += fmt.Sprintf("\t\t\thookParams[\"%s\"] = v.Val\n", v)
+						src += fmt.Sprintln("break\n\t\t}")
+						paramSrc += fmt.Sprintf(", hookParams[\"%s\"].(%s)", v, getGolangType(vb.Type))
+						find = true
+						break
+					}
+				}
+				if !find {
+					fmt.Printf("error: not found %s param in %s.%s\n", v, meta.Module, meta.Name)
+					os.Exit(1)
+				}
+			}
+			src += fmt.Sprintln("\t}")
+			src += fmt.Sprintln("\tfor k, v := range hookParams {")
+			src += fmt.Sprintln("\t\tif v == nil {")
+			src += fmt.Sprintf("\t\t\treturn %s, errors.New(\"query hook params not found:\" + k)\n", ret)
+			src += fmt.Sprintln("\t\t}")
+			src += fmt.Sprintln("\t}")
+		}
+		src += fmt.Sprintf("if err := %s(\"%s\", &q.QueryInfo%s); err != nil {\n", meta.Strategy.Hook.Handle, method, paramSrc)
+		src += fmt.Sprintf("\t\treturn %s, err", ret)
+		src += fmt.Sprintln("\t}")
+	}
+	return src
 }

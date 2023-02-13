@@ -44,22 +44,26 @@ func initActions(path string) error {
 			}
 
 			tokens, err := parseTokenFrom(bytes.NewReader(d), filename)
+			p := strings.Replace(filename, path+"/", "", 1)
 			if err != nil {
 				return err
 			}
-			if err = buildActions(tokens); err != nil {
+			if err = buildActions(tokens, p); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+
 	return err
 }
 
 // 根据token列表，构建出action结构
-func buildActions(tokens []string) error {
+func buildActions(tokens []string, path string) error {
 	var curp *processorHandler = nil
 	var curActionMetaData = make(map[string]string)
+	curActionMetaData["path"] = path
+
 	for i := 0; i < len(tokens); i++ {
 		v := tokens[i]
 		if v == "@" {
@@ -171,7 +175,7 @@ func parseTokenFrom(reader *bytes.Reader, filename string) ([]string, error) {
 					tokens = append(tokens, "@")
 					continue
 				}
-				if findMeta == true {
+				if findMeta {
 					actionMeta = append(actionMeta, c)
 				}
 			}

@@ -1,11 +1,14 @@
 package pproto
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"math"
 	"time"
 	"unsafe"
+
+	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/codec/protos/golang/json"
 )
 
 // request  protocol v3
@@ -83,6 +86,26 @@ type PlayProtocolResponse struct {
 	Header     responseHeader
 	Body       []byte
 	Attachment map[string][]byte
+}
+
+func NewPlayProtocolRequest(ctx context.Context, callerId int, action string, message interface{}) (request PlayProtocolRequest, err error) {
+	var body []byte
+	if body, err = json.Marshal(message); err != nil {
+		return
+	}
+
+	request.Header.CallerId = callerId
+	if c, ok := ctx.(*play.Context); ok {
+		c.Trace.SpanId++
+		request.Header.TraceId = c.Trace.TraceId
+		request.Header.SpanId = append(c.Trace.ParentSpanId, c.Trace.SpanId)
+	} else {
+		request.Header.TraceId = play.NewTraceId()
+		request.Header.SpanId = []byte{1}
+	}
+	request.Action = action
+	request.Body = body
+	return
 }
 
 // PackRequest 封包request请求
@@ -228,7 +251,7 @@ func UnmarshalProtocolRequest(data []byte) (protocol PlayProtocolRequest, dataSi
 	}
 
 	if string(data[:4]) != "==>>" {
-		return protocol, 0, errors.New("socket protocol head error")
+		return protocol, 0, errors.New("socket protocol head error:" + string(data[:4]))
 	}
 
 	size := _bytesToUint32(data[4:8]) + 8
@@ -431,14 +454,15 @@ func UnmarshalProtocolResponse(data []byte) (protocol PlayProtocolResponse, data
 	if len(data) < 9 {
 		return
 	}
-	if string(data[:4]) != "<<==" {
-		return protocol, 0, errors.New("socket protocol head error")
+	if string(data[:4]) != "<<==" && string(data[:4]) != "==>>" {
+		return protocol, 0, errors.New("socket protocol head error:" + string(data[:4]) + ". data is:" + string(data))
 	}
 
-	dataSize = _bytesToUint32(data[4:8]) + 8
-	if uint32(len(data)) < dataSize {
+	size := _bytesToUint32(data[4:8]) + 8
+	if uint32(len(data)) < size {
 		return
 	}
+	dataSize = size
 	protocol.Version = _bytesToUint8(data[8:9])
 	switch protocol.Version {
 	case 2:

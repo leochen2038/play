@@ -133,6 +133,9 @@ func (i *wsInstance) Packer() play.IPacker {
 }
 
 func (i *wsInstance) Transport(conn *play.Conn, data []byte) (err error) {
+	if conn.Websocket.MessageType == 0 {
+		conn.Websocket.MessageType = websocket.TextMessage
+	}
 	err = conn.Websocket.WebsocketConn.WriteMessage(conn.Websocket.MessageType, data)
 	return err
 }
