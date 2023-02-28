@@ -58,6 +58,8 @@ type Context struct {
 	Session       *Session
 	Trace         *TraceContext
 	Logger        lcx
+	FinishTime    time.Time
+	isFinish      bool
 	err           error
 	gctx          context.Context
 	gcfunc        context.CancelFunc
@@ -120,11 +122,23 @@ func (c *Context) Deadline() (deadline time.Time, ok bool) {
 	return c.gctx.Deadline()
 }
 
+func (c *Context) finish() {
+	c.isFinish = true
+	c.FinishTime = time.Now()
+	if c.err == nil {
+		c.err = c.gctx.Err()
+	}
+	c.gcfunc()
+}
+
 func (c *Context) Err() error {
 	if c.err != nil {
 		return c.err
 	}
-	return c.gctx.Err()
+	if !c.isFinish {
+		return c.gctx.Err()
+	}
+	return nil
 }
 
 func (c *Context) Value(key interface{}) interface{} {

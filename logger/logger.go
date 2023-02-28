@@ -81,6 +81,10 @@ func Info(k string, v interface{}, kv ...interface{}) {
 	}
 }
 
+func System(msg string, kv ...interface{}) {
+	Write(LEVEL_ERROR, time.Now(), "", "", getFile(), "system", msg, getAttach(kv))
+}
+
 func Error(err error, kv ...interface{}) {
 	Write(LEVEL_ERROR, time.Now(), "", "", getFile(), "error", err.Error(), getAttach(kv))
 }

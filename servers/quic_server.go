@@ -15,7 +15,7 @@ import (
 
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/packers"
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 )
 
 type quicInstance struct {

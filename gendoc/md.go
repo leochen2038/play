@@ -86,10 +86,14 @@ func getMdFieldTpl(fields map[string]play.ActionField, level int) string {
 		if field.Required {
 			required = "是"
 		}
-		if level > 0 {
-			field.Field = strings.Repeat("&nbsp;&nbsp;", level) + "└ " + field.Field
+		fieldName := field.Field
+		if len(field.Keys) > 0 {
+			fieldName = strings.Join(field.Keys, ",")
 		}
-		tmp += fmt.Sprintf("| %s | %s | %s | %s | %s | \n", field.Field, field.Typ, required, field.Desc, field.Default)
+		if level > 0 {
+			fieldName = strings.Repeat("&nbsp;&nbsp;", level) + "└ " + fieldName
+		}
+		tmp += fmt.Sprintf("| %s | %s | %s | %s | %s | \n", fieldName, field.Typ, required, field.Desc, field.Default)
 		if field.Child != nil {
 			tmp += getMdFieldTpl(field.Child, level+1)
 		}

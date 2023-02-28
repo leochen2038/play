@@ -37,7 +37,7 @@ func InitProject(upgrade bool) (err error) {
 	if err = createProcessor(); err != nil {
 		return
 	}
-	if err = createMiddleware(); err != nil {
+	if err = createUtils(); err != nil {
 		return
 	}
 	if err = createTemplate(); err != nil {
@@ -125,8 +125,8 @@ func createHook() (err error) {
 // 	return
 // }
 
-func createMiddleware() (err error) {
-	return os.Mkdir(env.ProjectPath+"/middleware", 0744)
+func createUtils() (err error) {
+	return os.Mkdir(env.ProjectPath+"/utils", 0744)
 }
 
 func createTemplate() (err error) {

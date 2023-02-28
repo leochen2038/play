@@ -189,7 +189,12 @@ func getSdkFieldTpl(fields map[string]play.ActionField, requestAction string, sp
 		if field.Child != nil {
 			specialFields[fieldType[strings.LastIndex(fieldType, "]")+1:]] = getSdkFieldTpl(field.Child, requestAction, specialFields)
 		}
-		tmp += fmt.Sprintf("%s %s `key:\"%s\" json:\"%s\"` \n", ucFirst(strings.TrimPrefix(field.Field, "_")), fieldType, field.Field, field.Field)
+		var keyTag, jsonTag = field.Field, field.Field
+		if len(field.Keys) > 0 {
+			keyTag = field.Keys[0]
+			jsonTag = field.Keys[0]
+		}
+		tmp += fmt.Sprintf("%s %s `key:\"%s\" json:\"%s\"` \n", ucFirst(strings.TrimPrefix(field.Field, "_")), fieldType, keyTag, jsonTag)
 	}
 	return tmp
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/codec/protos/golang/json"
 	"github.com/leochen2038/play/codec/protos/pproto"
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 )
 
 var callerId int = 0

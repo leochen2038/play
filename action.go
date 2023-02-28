@@ -7,10 +7,13 @@ import (
 	"reflect"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unsafe"
+
+	"github.com/leochen2038/play/logger"
 )
 
 type Action struct {
@@ -26,6 +29,8 @@ type Action struct {
 
 type ActionField struct {
 	Field      string
+	Keys       []string
+	Tags       map[string]string
 	Typ        string
 	OriginType string
 	Desc       string
@@ -113,18 +118,26 @@ func CallAction(gctx context.Context, s *Session, request *Request) (err error) 
 	}
 	ctx := NewPlayContext(gctx, s, request, timeout)
 
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("panic: %v", r)
-		}
-	}()
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		err = fmt.Errorf("panic: %v", r)
+	// 	}
+	// }()
 
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
 			ctx.err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
 		}
-		hook.OnFinish(ctx)
-		ctx.gcfunc()
+		ctx.finish()
+		go func() {
+			defer func() {
+				if panicInfo := recover(); panicInfo != nil {
+					logger.System("panic on hook.OnFinish", "panicInfo", panicInfo, "stack", string(debug.Stack()))
+				}
+			}()
+			hook.OnFinish(ctx)
+			// ctx.gcfunc()
+		}()
 	}()
 
 	if ctx.err = hook.OnRequest(ctx); ctx.Err() == nil {
@@ -264,11 +277,12 @@ func parserField(value reflect.Value) map[string]ActionField {
 		structNote := structType.Tag.Get("note")
 		structRequire := structType.Tag.Get("required")
 		structDefault := structType.Tag.Get("default")
-		if len(structKey) == 0 {
-			structKey = structType.Name
+		if len(structKey) > 0 {
+			field.Keys = strings.Split(structKey, ",")
 		}
 
-		field.Field = structKey
+		field.Field = structType.Name
+		field.Tags = TagLookup(string(structType.Tag))
 		field.Typ = structType.Type.String()
 		field.OriginType = structType.Type.String()
 		field.Desc = structNote
@@ -330,4 +344,45 @@ func parserField(value reflect.Value) map[string]ActionField {
 	}
 
 	return fields
+}
+
+func TagLookup(tag string) (res map[string]string) {
+	res = make(map[string]string)
+	for tag != "" {
+		// Skip leading space.
+		i := 0
+		for i < len(tag) && tag[i] == ' ' {
+			i++
+		}
+		tag = tag[i:]
+		if tag == "" {
+			break
+		}
+
+		i = 0
+		for i < len(tag) && tag[i] > ' ' && tag[i] != ':' && tag[i] != '"' && tag[i] != 0x7f {
+			i++
+		}
+		if i == 0 || i+1 >= len(tag) || tag[i] != ':' || tag[i+1] != '"' {
+			break
+		}
+		name := string(tag[:i])
+		tag = tag[i+1:]
+
+		// Scan quoted string to find value.
+		i = 1
+		for i < len(tag) && tag[i] != '"' {
+			if tag[i] == '\\' {
+				i++
+			}
+			i++
+		}
+		if i >= len(tag) {
+			break
+		}
+		qvalue := string(tag[:i+1])
+		tag = tag[i+1:]
+		res[name], _ = strconv.Unquote(qvalue)
+	}
+	return
 }

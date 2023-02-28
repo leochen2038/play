@@ -128,7 +128,7 @@ func _cronUpdate(config map[string]string) (err error) {
 	for _, job := range cronJobs {
 		if job.runEntryId > 0 {
 			if newSpec, ok := config[job.name]; !ok {
-				cronRunner.Remove(job.runEntryId)
+				cronRemoveJob(job)
 			} else if newSpec != job.spec {
 				cronRemoveJob(job)
 				cronAddJob(job, newSpec)
