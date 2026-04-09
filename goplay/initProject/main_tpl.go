@@ -13,6 +13,7 @@ package main
 import (
 	"fmt"
 	"%s/hook"
+	"time"
 	"%s/servers"
 )
 
@@ -24,7 +25,7 @@ import (
 func serverCode() string {
 	return `
 func main() {
-	httpInstance := servers.NewHttpInstance("httpServer", ":8090", hook.NewServerHook(), nil)
+	httpInstance := servers.NewHttpInstance("httpServer", ":8090", hook.NewServerHook(), nil, 500*time.Millisecond)
 	if err := servers.Boot(httpInstance); err != nil {
 		fmt.Println(err)
 	}

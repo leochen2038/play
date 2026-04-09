@@ -33,11 +33,20 @@ go install github.com/leochen2038/play/goplay@latest
 
 通过一个完整的例子，5 分钟跑通框架的核心流程：创建 HTTP 接口、接收参数、操作数据库、返回 JSON。
 
+### Step 0: 安装CLI工具
+
+```bash
+go install github.com/leochen2038/play/goplay@latest
+# 将bin路径添加到环境变量
+export PATH="$PATH:$(go env GOPATH)/bin"
+```
+
 ### Step 1: 初始化项目
 
 ```bash
-goplay init ./hello
-cd hello
+mkdir hello && cd hello
+goplay init .
+go mod tidy
 ```
 
 生成的项目结构：
@@ -120,7 +129,7 @@ hello.list {
 ### Step 4: 生成代码
 
 ```bash
-goplay reconst ./
+goplay rebuild .
 ```
 
 框架会自动：
@@ -142,7 +151,7 @@ import (
 
 type ProcHelloSay struct {
     Input struct {
-        Name string `key:"name" note:"姓名" default:"World"`
+        Name string `key:"name" default:"World" note:"姓名"`
     }
     Output struct {
         Message string `key:"message" note:"问候语"`
@@ -169,8 +178,8 @@ import (
 
 type ProcHelloSave struct {
     Input struct {
-        Name    string `key:"name"    note:"姓名"  required:"true"`
-        Content string `key:"content" note:"内容"  required:"true"`
+        Name    string `key:"name"     required:"true"  note:"姓名"`
+        Content string `key:"content"  required:"true"  note:"内容" `
     }
     Output struct {
         Id int `key:"id" note:"新记录ID"`
@@ -178,11 +187,11 @@ type ProcHelloSave struct {
 }
 
 func (p *ProcHelloSave) Run(ctx *play.Context) (string, error) {
-    msg := metas.NewDhelloTMessage().
+    msg := metas.NewDHelloTMessage().
         SetFname(p.Input.Name).
         SetFcontent(p.Input.Content)
 
-    if err := db.DhelloTMessage(ctx).Save(msg); err != nil {
+    if err := db.DHelloTMessage(ctx).Save(msg); err != nil {
         return "", play.WrapErr(err).WrapTip("保存失败")
     }
 
@@ -207,12 +216,18 @@ type ProcHelloList struct {
         Name string `key:"name" note:"按姓名筛选(可选)"`
     }
     Output struct {
-        List interface{} `key:"list" note:"消息列表"`
+        List []Message `key:"list" note:"消息列表"`
     }
 }
 
+type Message struct {
+	Id      int    `key:"id" note:"ID"`
+	Name    string `key:"name" note:"姓名"`
+	Content string `key:"content" note:"内容"`
+}
+
 func (p *ProcHelloList) Run(ctx *play.Context) (string, error) {
-    query := db.DhelloTMessage(ctx)
+    query := db.DHelloTMessage(ctx)
 
     // 如果传了 name 参数，按姓名筛选
     if p.Input.Name != "" {
@@ -224,7 +239,15 @@ func (p *ProcHelloList) Run(ctx *play.Context) (string, error) {
         return "", play.WrapErr(err).WrapTip("查询失败")
     }
 
-    p.Output.List = list
+    p.Output.List = make([]Message, len(list))
+	for i, msg := range list {
+        p.Output.List[i] = Message{
+            Id:      msg.Fid,
+            Name:    msg.Fname,
+            Content: msg.Fcontent,
+        }
+    }
+
     return "RC_NORMAL", nil
 }
 ```
@@ -278,7 +301,7 @@ func main() {
 重新生成注册代码并运行：
 
 ```bash
-goplay reconst ./
+goplay rebuild .
 go run .
 ```
 
@@ -287,33 +310,33 @@ go run .
 ```bash
 # Hello World
 curl "http://localhost:8090/hello/say?name=Play"
-# => {"message":"Hello, Play!","rc":0,"tm":1712000000}
+# => {"message":"Hello, Play!"}
 
 # 保存消息
 curl -X POST "http://localhost:8090/hello/save" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "name=Alice&content=Hello World"
-# => {"id":1,"rc":0,"tm":1712000000}
+# => {"id":1}
 
 # JSON 方式提交
 curl -X POST "http://localhost:8090/hello/save" \
   -H "Content-Type: application/json" \
   -d '{"name":"Bob","content":"Hi there"}'
-# => {"id":2,"rc":0,"tm":1712000000}
+# => {"id":2}
 
 # 查询列表
 curl "http://localhost:8090/hello/list"
-# => {"list":[{"Fid":2,"Fname":"Bob",...},{"Fid":1,"Fname":"Alice",...}],"rc":0,"tm":...}
+# => {"list":[{"id":2,"name":"Bob",...},{"id":1,"name":"Alice",...}]}
 
 # 按姓名筛选
 curl "http://localhost:8090/hello/list?name=Alice"
-# => {"list":[{"Fid":1,"Fname":"Alice",...}],"rc":0,"tm":...}
+# => {"list":[{"id":1,"name":"Alice",...}]}
 ```
 
 ### 工作流程总结
 
 ```
-编写/修改代码 → goplay reconst ./ → go run .
+编写/修改代码 → goplay rebuild . → go run .
 
 具体流程:
 1. assets/meta/*.xml     定义数据模型 → 自动生成 library/db/ 和 library/metas/
@@ -373,7 +396,7 @@ user.login {
 order.create {
     session.ProcCheckLogin(
         RC_NORMAL => order.ProcCheckStock(
-            RC_NORMAL => order.ProcCreateOrder()
+            RC_NORMAL => order.ProcCreateOrder(),
             RC_OUT_OF_STOCK => order.ProcNotifyRestock()
         )
     )
@@ -513,7 +536,7 @@ func (h ServerHook) OnFinish(ctx *play.Context) {
 每次修改了 Action 文件、Meta XML 或 Processor 后，执行：
 
 ```bash
-goplay reconst ./myproject
+goplay rebuild .
 ```
 
 框架会自动：
@@ -545,7 +568,7 @@ goplay reconst ./myproject
 </meta>
 ```
 
-执行 `goplay reconst` 后自动生成：
+执行 `goplay rebuild` 后自动生成：
 
 - `library/metas/` — 数据结构体 (带 setter 方法)
 - `library/db/` — 链式查询 API
@@ -838,7 +861,7 @@ kill -USR2 <pid>
 
 ```bash
 goplay init <project-path>     # 初始化新项目
-goplay reconst <project-path>  # 重新生成注册代码
+goplay rebuild <project-path>  # 重新生成注册代码
 goplay gendoc <project-path>   # 生成 API 文档
 ```
 

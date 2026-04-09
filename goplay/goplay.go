@@ -18,7 +18,7 @@ var command string
 
 // 多包同名，可以在import进行引用别名
 func init() {
-	env.FrameworkVer = "v0.9.0"
+	env.FrameworkVer = "v0.8.1"
 	env.FrameworkName = "github.com/leochen2038/play"
 	// commandLine.StringVar(&env.FrameworkName, "f", "github.com/leochen2038/play", "framework module")
 	// commandLine.Parse(os.Args[2:])
