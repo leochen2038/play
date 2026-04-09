@@ -9,29 +9,35 @@ import (
 	"net"
 	"net/http"
 	"runtime/debug"
+	"sort"
+	"time"
 
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/packers"
 )
 
 type sseInstance struct {
-	info   play.InstanceInfo
-	hook   play.IServerHook
-	ctrl   *play.InstanceCtrl
-	packer play.IPacker
-
-	tlsConfig  *tls.Config
-	httpServer http.Server
+	info        play.IInstanceInfo
+	hook        play.IServerHook
+	ctrl        *play.InstanceCtrl
+	packer      play.IPacker
+	actions     map[string]*play.ActionUnit
+	sortedNames []string
+	tlsConfig   *tls.Config
+	httpServer  http.Server
 }
 
-func NewSSEInstance(name string, addr string, hook play.IServerHook, packer play.IPacker) *sseInstance {
+func NewSSEInstance(name string, addr string, hook play.IServerHook, packer play.IPacker, defaultActionTimeout time.Duration) *sseInstance {
 	if packer == nil {
-		packer = packers.NewJsonPackert()
+		packer = packers.NewJsonPacker()
 	}
 	if hook == nil {
 		hook = defaultHook{}
 	}
-	return &sseInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: play.SERVER_TYPE_SSE}, packer: packer, hook: hook, ctrl: new(play.InstanceCtrl)}
+	if defaultActionTimeout == 0 {
+		defaultActionTimeout = defaultTimeout
+	}
+	return &sseInstance{info: play.NewInstanceInfo(name, addr, play.SERVER_TYPE_SSE, defaultActionTimeout), packer: packer, hook: hook, ctrl: new(play.InstanceCtrl), actions: make(map[string]*play.ActionUnit)}
 }
 
 func (i *sseInstance) WithCertificate(cert tls.Certificate) *sseInstance {
@@ -96,12 +102,12 @@ func (i *sseInstance) accept(s *play.Session) {
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	request, err := i.packer.Receive(s.Conn)
+	request, err := i.packer.Unpack(s.Conn)
 	if err != nil {
 		return
 	}
 
-	if err = doRequest(context.Background(), s, request); err != nil {
+	if err = play.DoRequest(context.Background(), s, request); err != nil {
 		return
 	}
 
@@ -121,7 +127,7 @@ func (i *sseInstance) Close() {
 	i.ctrl.WaitTask()
 }
 
-func (i *sseInstance) Info() play.InstanceInfo {
+func (i *sseInstance) Info() play.IInstanceInfo {
 	return i.info
 }
 
@@ -144,4 +150,37 @@ func (i *sseInstance) Ctrl() *play.InstanceCtrl {
 
 func (i *sseInstance) Network() string {
 	return "tcp"
+}
+
+func (i *sseInstance) ActionUnitNames() []string {
+	return append([]string(nil), i.sortedNames...)
+}
+
+func (i *sseInstance) LookupActionUnit(requestName string) *play.ActionUnit {
+	return i.actions[requestName]
+}
+
+func (i *sseInstance) BindActionSpace(spaceName string, actionPackages ...string) error {
+	return bindActionSpace(i, spaceName, actionPackages)
+}
+
+func (i *sseInstance) UpdateActionTimeout(spaceName string, actionName string, timeout time.Duration) {
+	if spaceName != "" {
+		spaceName = spaceName + "."
+	}
+	if act := i.actions[spaceName+actionName]; act != nil {
+		act.Timeout = timeout
+	}
+}
+
+func (i *sseInstance) AddActionUnits(units ...*play.ActionUnit) error {
+	for _, u := range units {
+		if i.actions[u.RequestName] != nil {
+			return errors.New("action unit " + u.RequestName + " is already exists in " + i.info.Name())
+		}
+		i.actions[u.RequestName] = u
+		i.sortedNames = append(i.sortedNames, u.RequestName)
+	}
+	sort.Strings(i.sortedNames)
+	return nil
 }

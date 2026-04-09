@@ -8,21 +8,21 @@ import (
 )
 
 type Err struct {
-	id     string
-	tip    string
-	err    error
-	time   time.Time
-	attach map[string]interface{}
-	track  []string
-	code   int
+	id    string
+	tip   string
+	err   error
+	time  time.Time
+	kvs   []interface{}
+	track []string
+	code  int
 }
 
 func (e Err) Err() error {
 	return e.err
 }
 
-func (e Err) Attach() map[string]interface{} {
-	return e.attach
+func (e Err) AttachKv() []interface{} {
+	return e.kvs
 }
 
 func (e Err) Tip() string {
@@ -65,14 +65,19 @@ func (e Err) WrapCode(code int) Err {
 	return e
 }
 
+func (e Err) WrapKv(kv ...interface{}) Err {
+	if len(kv) > 0 && len(kv)%2 == 0 {
+		e.kvs = append(e.kvs, kv...)
+	}
+	return e
+}
+
 func WrapErr(err error, kv ...interface{}) (e Err) {
+	if len(kv) > 0 && len(kv)%2 != 0 {
+		kv = append(kv, "")
+	}
 	if e, ok := err.(Err); ok {
-		len := len(kv) - 1
-		for i := 0; i < len; i += 2 {
-			if v, ok := kv[i].(string); ok {
-				e.attach[v] = kv[i+1]
-			}
-		}
+		e.kvs = append(e.kvs, kv...)
 		return e
 	}
 	return _wrapErr(err, 0, "", kv)
@@ -81,17 +86,10 @@ func WrapErr(err error, kv ...interface{}) (e Err) {
 func _wrapErr(e error, code int, tip string, kv []interface{}) (err Err) {
 	err.err = e
 	err.time = time.Now()
-	err.attach = make(map[string]interface{})
 	err.id = Generate28Id("", "")
+	err.kvs = kv
 	err.code = code
 	err.tip = tip
-	len := len(kv) - 1
-
-	for i := 0; i < len; i += 2 {
-		if v, ok := kv[i].(string); ok {
-			err.attach[v] = kv[i+1]
-		}
-	}
 
 	for i := 2; i < 10; i++ {
 		if funcptr, file, line, ok := runtime.Caller(i); ok {
@@ -99,7 +97,7 @@ func _wrapErr(e error, code int, tip string, kv []interface{}) (err Err) {
 				break
 			}
 			funcName := runtime.FuncForPC(funcptr).Name()
-			err.track = append(err.track, strings.Replace(file, BuildBasePath, "", 1)+":"+strconv.Itoa(line)+"->"+funcName[strings.Index(funcName, ".")+1:]+"()")
+			err.track = append(err.track, strings.Replace(file, BuildBasePath, "", 1)+":"+strconv.Itoa(line)+" "+funcName[strings.Index(funcName, ".")+1:]+"()")
 			if strings.HasPrefix(funcName, "main.main") {
 				break
 			}

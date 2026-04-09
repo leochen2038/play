@@ -1,7 +1,6 @@
 package servers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -14,8 +13,10 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/leochen2038/play"
+	"github.com/leochen2038/play/gentools"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,7 +33,9 @@ var (
 )
 
 const (
-	envGraceful = "GRACEFUL"
+	envGraceful    = "GRACEFUL"
+	envGenDoc      = "GENDOC"
+	defaultTimeout = 500 * time.Millisecond
 )
 
 func init() {
@@ -43,7 +46,24 @@ type filer interface {
 	File() (*os.File, error)
 }
 
+func IfOnlyGenDocs(is ...play.IServer) error {
+	if os.Getenv(envGenDoc) == "true" {
+		for _, server := range is {
+			if server != nil {
+				if err := gentools.GenMdDocs(".", server); err != nil {
+					return fmt.Errorf("generate docs for server %s failed: %v", server.Info().Name(), err)
+				}
+			}
+		}
+		os.Exit(0)
+	}
+	return nil
+}
+
 func Boot(is ...play.IServer) error {
+	if err := IfOnlyGenDocs(is...); err != nil {
+		return err
+	}
 	var instanceWaitGroup sync.WaitGroup
 	var egr errgroup.Group
 	for _, i := range is {
@@ -52,7 +72,7 @@ func Boot(is ...play.IServer) error {
 			var err error
 			var listener net.Listener
 			var udplistener net.PacketConn
-			var gracefulSocket = getGracefulSocket(i.Info().Name)
+			var gracefulSocket = getGracefulSocket(i.Info().Name())
 			egr.Go(func() error {
 				switch i.Network() {
 				case "tcp":
@@ -61,7 +81,7 @@ func Boot(is ...play.IServer) error {
 							return err
 						}
 					} else {
-						if listener, err = net.Listen(i.Network(), i.Info().Address); err != nil {
+						if listener, err = net.Listen(i.Network(), i.Info().Address()); err != nil {
 							return err
 						}
 					}
@@ -71,27 +91,29 @@ func Boot(is ...play.IServer) error {
 							return err
 						}
 					} else {
-						if udplistener, err = net.ListenPacket(i.Network(), i.Info().Address); err != nil {
+						if udplistener, err = net.ListenPacket(i.Network(), i.Info().Address()); err != nil {
 							return err
 						}
 					}
+				case "stdio":
+					// stdio 模式不需要 listener，直接运行
 				default:
 					return errors.New("unsupported network")
 				}
 
-				if _, ok := instances.Load(i.Info().Name); ok {
+				if _, ok := instances.Load(i.Info().Name()); ok {
 					if listener != nil {
 						_ = listener.Close()
 					}
 					if udplistener != nil {
 						_ = udplistener.Close()
 					}
-					return errors.New("server name " + i.Info().Name + " is running")
+					return errors.New("server name " + i.Info().Name() + " is running")
 				}
 
 				instanceWaitGroup.Add(1)
-				instances.Store(i.Info().Name, runningInstance{listener: listener, udpListener: udplistener, server: i})
-				runs = append(runs, i.Info().Name)
+				instances.Store(i.Info().Name(), runningInstance{listener: listener, udpListener: udplistener, server: i})
+				runs = append(runs, i.Info().Name())
 				go func() {
 					defer instanceWaitGroup.Done()
 					_ = i.Run(listener, udplistener)
@@ -104,7 +126,7 @@ func Boot(is ...play.IServer) error {
 	if err := egr.Wait(); err != nil {
 		for _, i := range is {
 			if i != nil {
-				Shutdown(i.Info().Name)
+				Shutdown(i.Info().Name())
 			}
 		}
 		return err
@@ -146,16 +168,6 @@ func Shutdown(name string) {
 	}
 }
 
-// 返回callAction里的onFinish错误
-func doRequest(gctx context.Context, s *play.Session, request *play.Request) (err error) {
-	s.Server.Ctrl().AddTask()
-	defer func() {
-		s.Server.Ctrl().DoneTask()
-	}()
-
-	return play.CallAction(gctx, s, request)
-}
-
 func reload() (int, error) {
 	var err error
 	var tags []string
@@ -195,7 +207,7 @@ func reload() (int, error) {
 		}
 	}
 
-	env = append(env, fmt.Sprintf("%s=%s", envGraceful, strings.Join(tags, "-")))
+	env = append(env, fmt.Sprintf("%s=%s", envGraceful, strings.Join(tags, "|")))
 	files := []*os.File{os.Stdin, os.Stdout, os.Stderr}
 	files = append(files, sockes...)
 
@@ -243,7 +255,7 @@ func shouldKillParent() (err error) {
 
 func getGracefulSocket(name string) (id uintptr) {
 	if os.Getenv(envGraceful) != "" {
-		for _, v := range strings.Split(os.Getenv(envGraceful), "-") {
+		for _, v := range strings.Split(os.Getenv(envGraceful), "|") {
 			if socket := strings.Split(v, ":"); len(socket) == 2 {
 				if socket[0] == name {
 					socketId, _ := strconv.Atoi(socket[1])
@@ -253,6 +265,32 @@ func getGracefulSocket(name string) (id uintptr) {
 		}
 	}
 	return
+}
+
+func bindActionSpace(server play.IServer, spaceName string, actionPackages []string) error {
+	prefix := ""
+	if spaceName != "" {
+		prefix = spaceName + "."
+	}
+	for _, pkg := range actionPackages {
+		if acts := play.ActionsByPackage(pkg); acts != nil {
+			units := make([]*play.ActionUnit, 0, len(acts))
+			for _, act := range acts {
+				requestName := prefix + act.Name()
+				units = append(units, &play.ActionUnit{
+					Action:      act,
+					Space:       spaceName,
+					Timeout:     server.Info().DefaultActionTimeout(),
+					RequestName: requestName,
+				})
+			}
+			if err := server.AddActionUnits(units...); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 type defaultHook struct {

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -33,7 +32,7 @@ func checkProcessorFile(name string) (err error) {
 		}
 
 		src := getProcessorTpl(pacekageNme, frameworkPath, funcName)
-		if err = ioutil.WriteFile(file, []byte(src), 0644); err != nil {
+		if err = os.WriteFile(file, []byte(src), 0644); err != nil {
 			return
 		}
 		fmt.Printf("create processor %s\n", file)

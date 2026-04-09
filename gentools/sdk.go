@@ -1,10 +1,9 @@
-package gendoc
+package gentools
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -44,7 +43,7 @@ type {{responseName}} struct {
 
 // {{callAction}} {{desc}}
 func {{callAction}}(ctx context.Context, agent play.Agent, req {{requestName}}) (resp {{responseName}}, err error) {
-	var service, action = "{{serviceName}}", "{{actionName}}"
+	var service, action = "{{moduleName}}", "{{actionName}}"
 	var sendData, recvData []byte
 
 	if sendData, err = agent.Marshal(ctx, service, action, req); err != nil {
@@ -71,55 +70,52 @@ type {{name}} struct {
 
 var specialFields = map[string]string{}
 
-func genSdk() error {
-	_ = os.Mkdir(filepath.Dir(sdkFilePath), 0744)
+func GenSdk(path string, is ...play.IServer) (err error) {
+	for _, i := range is {
+		filePath := fmt.Sprintf("%s/%s_sdk.go", path, i.Info().Name())
 
-	// step 1. 打开文件
-	var f *os.File
-	var err error
-	f, err = os.OpenFile(sdkFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
-	if err != nil {
-		fmt.Println(err)
-		return err
+		// step 1. 打开文件
+		var f *os.File
+		if f, err = os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755); err != nil {
+			return
+		}
+		defer func() {
+			_ = f.Close()
+		}()
+
+		// step 2. 获取内容
+		actions := i.ActionUnitNames()
+		for _, action := range actions {
+			if err = getSdkActionTpl(i.Info().Name(), i.LookupActionUnit(action)); err != nil {
+				return
+			}
+		}
+
+		// step 3. 写入文件
+		if _, err = f.Write([]byte(sdkDocument)); err != nil {
+			return
+		}
+		_ = exec.Command("gofmt", "-w", filePath).Run()
 	}
-	defer func() {
-		_ = f.Close()
-	}()
-
-	// step 2. 获取内容
-	err = play.WalkAction(getSdkActionTpl)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-
-	// step 3. 写入文件
-	_, err = f.Write([]byte(sdkDocument))
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	_ = exec.Command("gofmt", "-w", sdkFilePath).Run()
-
-	return nil
+	return
 }
 
-func getSdkActionTpl(action *play.Action) error {
+func getSdkActionTpl(moduleName string, unit *play.ActionUnit) (err error) {
 	var tmp = sdkTemplate
-	sdkDocument = strings.ReplaceAll(sdkDocument, "{{packageName}}", getPackageName(sdkFilePath))
+	sdkDocument = strings.ReplaceAll(sdkDocument, "{{packageName}}", getPackageName(moduleName))
 
 	actionSpecialFields := map[string]string{}
-	requestAction := getRequestAction(action.Name())
+	requestAction := getRequestAction(unit.RequestName)
 	callAction := "Call" + requestAction
 
 	tmp = strings.ReplaceAll(tmp, "{{requestName}}", "Req"+requestAction)
 	tmp = strings.ReplaceAll(tmp, "{{responseName}}", "Res"+requestAction)
-	tmp = strings.ReplaceAll(tmp, "{{serviceName}}", getPackageName(sdkFilePath))
-	tmp = strings.ReplaceAll(tmp, "{{desc}}", action.MetaData()["desc"])
-	tmp = strings.ReplaceAll(tmp, "{{actionName}}", action.Name())
+	tmp = strings.ReplaceAll(tmp, "{{moduleName}}", moduleName)
+	tmp = strings.ReplaceAll(tmp, "{{desc}}", unit.Action.MetaData()["desc"])
+	tmp = strings.ReplaceAll(tmp, "{{actionName}}", unit.RequestName)
 	tmp = strings.ReplaceAll(tmp, "{{callAction}}", callAction)
-	tmp = strings.ReplaceAll(tmp, "{{requestFields}}", getSdkFieldTpl(action.Input(), requestAction, actionSpecialFields))
-	tmp = strings.ReplaceAll(tmp, "{{responseFields}}", getSdkFieldTpl(action.Output(), requestAction, actionSpecialFields))
+	tmp = strings.ReplaceAll(tmp, "{{requestFields}}", getSdkFieldTpl(unit.Action.Input(), requestAction, actionSpecialFields))
+	tmp = strings.ReplaceAll(tmp, "{{responseFields}}", getSdkFieldTpl(unit.Action.Output(), requestAction, actionSpecialFields))
 	tmp = strings.ReplaceAll(tmp, "{{specialFields}}", getSpecialFields(actionSpecialFields))
 	sdkDocument += tmp
 
@@ -199,11 +195,9 @@ func getSdkFieldTpl(fields map[string]play.ActionField, requestAction string, sp
 	return tmp
 }
 
-func getPackageName(sdkFilePath string) string {
+func getPackageName(moduleName string) string {
 	var name string
-	filename := strings.TrimSuffix(filepath.Base(sdkFilePath), ".go")
-	filename = strings.TrimSuffix(filename, ".sdk")
-	arrs := strings.Split(filename, "-")
+	arrs := strings.Split(moduleName, "-")
 	for i, data := range arrs {
 		if i == 0 {
 			name += data

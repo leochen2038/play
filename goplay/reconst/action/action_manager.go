@@ -3,7 +3,6 @@ package action
 import (
 	"bytes"
 	"errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ type action struct {
 	name        string
 	metaData    map[string]string
 	handlerList *processorHandler
+	packageName string
 }
 
 type processorHandler struct {
@@ -38,18 +38,17 @@ func getActions(path string) (map[string]action, error) {
 func initActions(path string) error {
 	err := filepath.Walk(path, func(filename string, fi os.FileInfo, err error) error {
 		if !fi.IsDir() && fi.Name()[0:1] != "." {
-			d, err := ioutil.ReadFile(filename)
+			d, err := os.ReadFile(filename)
 			if err != nil {
-				return err
+				return errors.New(err.Error() + " in file:" + filename)
 			}
 
 			tokens, err := parseTokenFrom(bytes.NewReader(d), filename)
-			p := strings.Replace(filename, path+"/", "", 1)
 			if err != nil {
-				return err
+				return errors.New(err.Error() + " in file:" + filename)
 			}
-			if err = buildActions(tokens, p); err != nil {
-				return err
+			if err = buildActions(tokens); err != nil {
+				return errors.New(err.Error() + " in file:" + filename)
 			}
 		}
 		return nil
@@ -59,10 +58,10 @@ func initActions(path string) error {
 }
 
 // 根据token列表，构建出action结构
-func buildActions(tokens []string, path string) error {
+func buildActions(tokens []string) error {
 	var curp *processorHandler = nil
 	var curActionMetaData = make(map[string]string)
-	curActionMetaData["path"] = path
+	packageName := ""
 
 	for i := 0; i < len(tokens); i++ {
 		v := tokens[i]
@@ -70,7 +69,7 @@ func buildActions(tokens []string, path string) error {
 			if items := strings.SplitN(tokens[i+1], ":", 2); len(items) != 2 {
 				return errors.New("error metadata string:" + tokens[i+1])
 			} else {
-				k, v := strings.TrimSpace(items[0]), strings.TrimSpace(items[1])
+				k, v := strings.TrimSpace(items[0]), strings.TrimSpace(strings.Trim(items[1], "`"))
 				curActionMetaData[k] = v
 			}
 		}
@@ -85,7 +84,11 @@ func buildActions(tokens []string, path string) error {
 			}
 
 			for _, iv := range strings.Split(tokens[i-2], ",") {
-				action := action{name: iv, handlerList: curp, metaData: curActionMetaData}
+				if packageName == "" {
+					return errors.New("miss package name before action define")
+				}
+				iv = strings.TrimSpace(iv)
+				action := action{name: iv, handlerList: curp, metaData: curActionMetaData, packageName: packageName}
 				actions[iv] = action
 				curActionMetaData = make(map[string]string)
 			}
@@ -131,6 +134,15 @@ func buildActions(tokens []string, path string) error {
 
 		if v == "}" {
 			curp = nil
+			continue
+
+		}
+		if v == "[" {
+			if len(tokens) < i+3 || tokens[i+2] != "]" {
+				return errors.New("miss package name before action define")
+			}
+			packageName = strings.TrimSpace(tokens[i+1])
+			i += 2
 			continue
 		}
 	}
@@ -201,7 +213,12 @@ func parseTokenFrom(reader *bytes.Reader, filename string) ([]string, error) {
 			token = token[0:0]
 			continue
 		}
-		if c == '}' || c == ')' {
+		if c == '[' {
+			tokens = append(tokens, string(c))
+			token = token[0:0]
+			continue
+		}
+		if c == '}' || c == ')' || c == ']' {
 			if len(token) > 0 {
 				tokens = append(tokens, string(token))
 				token = token[0:0]

@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"runtime/debug"
+	"sort"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/leochen2038/play"
@@ -20,23 +22,28 @@ var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
 }}
 
 type wsInstance struct {
-	info   play.InstanceInfo
-	hook   play.IServerHook
-	ctrl   *play.InstanceCtrl
-	packer play.IPacker
-
-	tlsConfig  *tls.Config
-	httpServer http.Server
+	info        play.IInstanceInfo
+	hook        play.IServerHook
+	ctrl        *play.InstanceCtrl
+	packer      play.IPacker
+	actions     map[string]*play.ActionUnit
+	sortedNames []string
+	tlsConfig   *tls.Config
+	httpServer  http.Server
 }
 
-func NewWsInstance(name string, addr string, hook play.IServerHook, packer play.IPacker) *wsInstance {
+func NewWsInstance(name string, addr string, hook play.IServerHook, packer play.IPacker, defaultActionTimeout time.Duration) *wsInstance {
 	if packer == nil {
-		packer = packers.NewJsonPackert()
+		packer = packers.NewJsonPacker()
 	}
 	if hook == nil {
 		hook = defaultHook{}
 	}
-	return &wsInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: play.SERVER_TYPE_WS}, packer: packer, hook: hook, ctrl: new(play.InstanceCtrl)}
+	if defaultActionTimeout == 0 {
+		defaultActionTimeout = defaultTimeout
+	}
+	return &wsInstance{info: play.NewInstanceInfo(name, addr, play.SERVER_TYPE_WS, defaultActionTimeout), packer: packer,
+		hook: hook, ctrl: new(play.InstanceCtrl), actions: make(map[string]*play.ActionUnit)}
 }
 
 func (i *wsInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +52,9 @@ func (i *wsInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var sess = play.NewSession(r.Context(), i)
 
 	defer func() {
+		if conn != nil {
+			conn.Close()
+		}
 		recover()
 	}()
 
@@ -74,8 +84,8 @@ func (i *wsInstance) accept(s *play.Session) {
 	}()
 	i.hook.OnConnect(s, nil)
 
-	if request, err = i.packer.Receive(s.Conn); request != nil {
-		if err = doRequest(context.Background(), s, request); err != nil {
+	if request, err = i.packer.Unpack(s.Conn); request != nil {
+		if err = play.DoRequest(context.Background(), s, request); err != nil {
 			return
 		}
 	}
@@ -98,10 +108,10 @@ func (i *wsInstance) onReady(sess *play.Session) error {
 			sess.Conn.Websocket.Message = message
 			sess.Conn.Websocket.MessageType = messageType
 
-			if request, err := i.packer.Receive(sess.Conn); err != nil {
+			if request, err := i.packer.Unpack(sess.Conn); err != nil {
 				return err
 			} else {
-				if err := doRequest(context.Background(), sess, request); err != nil {
+				if err := play.DoRequest(context.Background(), sess, request); err != nil {
 					return err
 				}
 			}
@@ -124,7 +134,7 @@ func (i *wsInstance) update(w http.ResponseWriter, r *http.Request) (*websocket.
 	}
 }
 
-func (i *wsInstance) Info() play.InstanceInfo {
+func (i *wsInstance) Info() play.IInstanceInfo {
 	return i.info
 }
 
@@ -172,4 +182,37 @@ func (i *wsInstance) Close() {
 
 func (i *wsInstance) Network() string {
 	return "tcp"
+}
+
+func (i *wsInstance) ActionUnitNames() []string {
+	return append([]string(nil), i.sortedNames...)
+}
+
+func (i *wsInstance) LookupActionUnit(requestName string) *play.ActionUnit {
+	return i.actions[requestName]
+}
+
+func (i *wsInstance) BindActionSpace(spaceName string, actionPackages ...string) error {
+	return bindActionSpace(i, spaceName, actionPackages)
+}
+
+func (i *wsInstance) UpdateActionTimeout(spaceName string, actionName string, timeout time.Duration) {
+	if spaceName != "" {
+		spaceName = spaceName + "."
+	}
+	if act := i.actions[spaceName+actionName]; act != nil {
+		act.Timeout = timeout
+	}
+}
+
+func (i *wsInstance) AddActionUnits(units ...*play.ActionUnit) error {
+	for _, u := range units {
+		if i.actions[u.RequestName] != nil {
+			return errors.New("action unit " + u.RequestName + " is already exists in " + i.info.Name())
+		}
+		i.actions[u.RequestName] = u
+		i.sortedNames = append(i.sortedNames, u.RequestName)
+	}
+	sort.Strings(i.sortedNames)
+	return nil
 }

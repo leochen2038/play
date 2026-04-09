@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/codec/protos/golang/json"
 )
 
@@ -17,10 +19,13 @@ const LEVEL_DEBUG = 3
 const LEVEL_INFO = 2
 const LEVEL_WARN = 1
 const LEVEL_ERROR = 0
+const LEVEL_ACCESS = -1
+const LEVEL_ALERT = -2
 
 var level = 3
 var wchan chan *log
-var lvMap = map[int]string{3: "debug", 2: "info", 1: "warn", 0: "error"}
+var daysToKeep = 7
+var lvMap = map[int]string{3: "DEBUG", 2: "INFO", 1: "WARN", 0: "ERROR", -1: "ACCESS", -2: "ALERT"}
 
 type log struct {
 	time  time.Time
@@ -35,8 +40,16 @@ var (
 
 func init() {
 	exeName, _ = os.Executable()
-	wchan = make(chan *log, 64)
+	wchan = make(chan *log, 256)
 	go writerWith2Day(wchan)
+}
+
+func SetLogKeepDays(days int) {
+	if days > 1 {
+		daysToKeep = days
+	} else {
+		daysToKeep = 1
+	}
 }
 
 func SetLevel(l int) {
@@ -49,23 +62,28 @@ func SetLevel(l int) {
 	level = l
 }
 
-func Write(lv int, now time.Time, traceId string, action string, file string, k string, v interface{}, attach map[string]interface{}) {
+func Write(lv int, now time.Time, cost time.Duration, traceId string, action string, file string, message string, kv []interface{}, responseSize int) {
 	if level < lv {
 		return
 	}
-	data := fmt.Sprintf(`{"time":"%s", "level":"%s", "traceId":"%s", "action":"%s", "file":"%s"`, now.Format("2006-01-02 15:04:05.000"), lvMap[lv], traceId, action, file)
-
-	if k != "" {
-		if vv, _ := json.MarshalEscape(v, false, false); vv != nil {
-			data += fmt.Sprintf(`, "%s":%s`, k, vv)
+	var attach, data string
+	if len(kv) > 0 && len(kv)%2 != 0 {
+		kv = append(kv, "")
+	}
+	for i := 1; i < len(kv); i += 2 {
+		if k, ok := kv[i-1].(string); ok {
+			if v, _ := json.MarshalEscape(kv[i], false, false); v != nil {
+				attach += fmt.Sprintf(`, "%s":%s`, k, v)
+			}
 		}
 	}
-	for k, v := range attach {
-		if vv, _ := json.MarshalEscape(v, false, false); vv != nil {
-			data += fmt.Sprintf(`, "%s":%s`, k, vv)
-		}
+	attach = strings.TrimLeft(attach, ", ")
+	// [时间] [等级] [action] [耗时] [message] [文件路径] [自定义参数] [tracId] [responseSize]
+	if responseSize > 0 {
+		data = fmt.Sprintf("[%s] [%s] [%s] [%dms] [%s] [{%s}] [%s] [%s] [%d]\n", now.Format("2006-01-02 15:04:05.000"), lvMap[lv], action, int64(cost/time.Millisecond), message, file, attach, traceId, responseSize)
+	} else {
+		data = fmt.Sprintf("[%s] [%s] [%s] [%dms] [%s] [{%s}] [%s] [%s]\n", now.Format("2006-01-02 15:04:05.000"), lvMap[lv], action, int64(cost/time.Millisecond), message, file, attach, traceId)
 	}
-	data += "}\n"
 
 	select {
 	case wchan <- &log{now, level, []byte(data)}:
@@ -75,48 +93,102 @@ func Write(lv int, now time.Time, traceId string, action string, file string, k 
 	}
 }
 
-func Info(k string, v interface{}, kv ...interface{}) {
-	if level >= LEVEL_INFO {
-		Write(LEVEL_INFO, time.Now(), "", "", getFile(), k, v, getAttach(kv))
+func Info(ctx context.Context, message string, kv ...interface{}) {
+	var traceId, action string
+	var cost time.Duration
+	var now = time.Now()
+	if c, ok := ctx.(*play.Context); ok {
+		traceId, action = c.Trace.TraceId, c.ActionRequest.Name
+		cost = now.Sub(c.ActionRequest.RequestTime)
 	}
+	Write(LEVEL_INFO, now, cost, traceId, action, getFile(), message, kv, 0)
 }
 
-func System(msg string, kv ...interface{}) {
-	Write(LEVEL_ERROR, time.Now(), "", "", getFile(), "system", msg, getAttach(kv))
-}
-
-func Error(err error, kv ...interface{}) {
-	Write(LEVEL_ERROR, time.Now(), "", "", getFile(), "error", err.Error(), getAttach(kv))
-}
-
-func Debug(k string, v interface{}, kv ...interface{}) {
-	if level >= LEVEL_DEBUG {
-		Write(LEVEL_DEBUG, time.Now(), "", "", getFile(), k, v, getAttach(kv))
+func Alert(ctx context.Context, message string, kv ...interface{}) {
+	var traceId, action string
+	var cost time.Duration
+	var now = time.Now()
+	if c, ok := ctx.(*play.Context); ok {
+		traceId, action = c.Trace.TraceId, c.ActionRequest.Name
+		cost = now.Sub(c.ActionRequest.RequestTime)
 	}
+	Write(LEVEL_ALERT, now, cost, traceId, action, getFile(), message, kv, 0)
 }
 
-func Warn(k string, v interface{}, kv ...interface{}) {
-	if level >= LEVEL_WARN {
-		Write(LEVEL_WARN, time.Now(), "", "", getFile(), k, v, getAttach(kv))
+func Error(ctx context.Context, err error, kv ...interface{}) {
+	var ikv []interface{}
+	var traceId, action, file string
+	var cost time.Duration
+	var now = time.Now()
+	if c, ok := ctx.(*play.Context); ok {
+		traceId, action = c.Trace.TraceId, c.ActionRequest.Name
+		cost = now.Sub(c.ActionRequest.RequestTime)
 	}
-}
-
-func getAttach(kv []interface{}) map[string]interface{} {
-	attach := make(map[string]interface{})
-	len := len(kv) - 1
-
-	for i := 0; i < len; i += 2 {
-		if v, ok := kv[i].(string); ok {
-			attach[v] = kv[i+1]
+	if playErr, ok := err.(play.Err); ok && len(playErr.Track()) > 0 {
+		file = playErr.Track()[0]
+		if len(playErr.AttachKv()) > 1 {
+			ikv = append(ikv, playErr.AttachKv()...)
 		}
+		ikv = append(ikv, kv...)
+	} else {
+		file = getFile()
+		ikv = kv
 	}
-	return attach
+	Write(LEVEL_ERROR, now, cost, traceId, action, file, err.Error(), ikv, 0)
+}
+
+func Access(ctx *play.Context) {
+	var ikv []interface{}
+	var file string
+	now := time.Now()
+	cost := now.Sub(ctx.ActionRequest.RequestTime)
+	traceId, action := ctx.Trace.TraceId, ctx.ActionRequest.Name
+
+	if ctx.Err() != nil {
+		if playErr, ok := ctx.Err().(play.Err); ok && len(playErr.Track()) > 0 {
+			file = playErr.Track()[0]
+			ikv = append(ikv, "err", ctx.Err().Error())
+			if len(playErr.AttachKv()) > 1 {
+				ikv = append(ikv, playErr.AttachKv()...)
+			}
+			ikv = append(ikv, "input", ctx.Input.Value(""))
+		} else {
+			ikv = []interface{}{"err", ctx.Err().Error(), "input", ctx.Input.Value("")}
+		}
+
+		Write(LEVEL_ACCESS, now, cost, traceId, action, file, "fail", ikv, ctx.Response.ResponseSize)
+	} else {
+		ikv = []interface{}{"user", ctx.Session.User}
+		Write(LEVEL_ACCESS, now, cost, traceId, action, file, "success", ikv, ctx.Response.ResponseSize)
+	}
+}
+
+func Debug(ctx context.Context, message string, kv ...interface{}) {
+	var traceId, action string
+	var cost time.Duration
+	var now = time.Now()
+	if c, ok := ctx.(*play.Context); ok {
+		traceId, action = c.Trace.TraceId, c.ActionRequest.Name
+		cost = now.Sub(c.ActionRequest.RequestTime)
+	}
+	Write(LEVEL_DEBUG, now, cost, traceId, action, getFile(), message, kv, 0)
+}
+
+func Warn(ctx context.Context, message string, kv ...interface{}) {
+	var traceId, action string
+	var cost time.Duration
+	var now = time.Now()
+	if c, ok := ctx.(*play.Context); ok {
+		traceId, action = c.Trace.TraceId, c.ActionRequest.Name
+		cost = now.Sub(c.ActionRequest.RequestTime)
+	}
+	Write(LEVEL_WARN, now, cost, traceId, action, getFile(), message, kv, 0)
 }
 
 func getFile() string {
 	funcptr, file, line, _ := runtime.Caller(2)
 	funcName := runtime.FuncForPC(funcptr).Name()
-	return fmt.Sprintf(`%s:%d->%s()`, file, line, funcName[strings.Index(funcName, ".")+1:])
+	return fmt.Sprintf(`%s:%d %s()`, strings.Replace(file, play.BuildBasePath, "", 1), line, funcName[strings.Index(funcName, ".")+1:])
 }
 
 func writerWith2Day(logchan <-chan *log) {
@@ -154,7 +226,6 @@ func fileHandler(ts time.Time) *os.File {
 		file.Close()
 	}
 
-	// 只保留最新三份日志
 	logs := make([]os.FileInfo, 0)
 	if dir, err := os.Open(path.Dir(exeName)); err == nil {
 		list, _ := dir.ReadDir(0)
@@ -173,8 +244,9 @@ func fileHandler(ts time.Time) *os.File {
 			return logs[i].ModTime().After(logs[j].ModTime())
 		})
 
-		for i := 3; i < len(logs); i++ {
-			if f, ok := logfile.LoadAndDelete(logs[i].Name()); ok {
+		// 只保留固定天数的日志
+		for i := daysToKeep; i < len(logs); i++ {
+			if f, ok := logfile.LoadAndDelete(path.Join(path.Dir(exeName), logs[i].Name())); ok {
 				f.(*os.File).Close()
 			}
 			os.Remove(path.Join(path.Dir(exeName), logs[i].Name()))

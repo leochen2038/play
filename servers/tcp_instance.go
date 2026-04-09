@@ -2,33 +2,41 @@ package servers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"runtime/debug"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/packers"
 )
 
-type TcpInstance struct {
-	info   play.InstanceInfo
-	hook   play.IServerHook
-	ctrl   *play.InstanceCtrl
-	packer play.IPacker
+type tcpInstance struct {
+	info        play.IInstanceInfo
+	hook        play.IServerHook
+	ctrl        *play.InstanceCtrl
+	actions     map[string]*play.ActionUnit
+	sortedNames []string
+	packer      play.IPacker
 }
 
-func NewTcpInstance(name string, addr string, hook play.IServerHook, packer play.IPacker) *TcpInstance {
+func NewTcpInstance(name string, addr string, hook play.IServerHook, packer play.IPacker, defaultActionTimeout time.Duration) *tcpInstance {
 	if packer == nil {
 		packer = packers.NewPlayPacker()
 	}
 	if hook == nil {
 		hook = defaultHook{}
 	}
-	return &TcpInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: play.SERVER_TYPE_TCP}, packer: packer, hook: hook, ctrl: new(play.InstanceCtrl)}
+	if defaultActionTimeout == 0 {
+		defaultActionTimeout = defaultTimeout
+	}
+	return &tcpInstance{info: play.NewInstanceInfo(name, addr, play.SERVER_TYPE_TCP, defaultActionTimeout), packer: packer, hook: hook, ctrl: new(play.InstanceCtrl), actions: make(map[string]*play.ActionUnit)}
 }
 
-func (i *TcpInstance) onReady(s *play.Session) (err error) {
+func (i *tcpInstance) onReady(s *play.Session) (err error) {
 	var n int
 	var buffer = make([]byte, 4096)
 	var request *play.Request
@@ -44,7 +52,7 @@ func (i *TcpInstance) onReady(s *play.Session) (err error) {
 				return
 			}
 			s.Conn.Tcp.Surplus = append(s.Conn.Tcp.Surplus, buffer[:n]...)
-			if request, err = i.packer.Receive(s.Conn); err != nil {
+			if request, err = i.packer.Unpack(s.Conn); err != nil {
 				return
 			}
 			if request == nil {
@@ -53,7 +61,7 @@ func (i *TcpInstance) onReady(s *play.Session) (err error) {
 				if request.Version > s.Conn.Tcp.Version {
 					s.Conn.Tcp.Version = request.Version
 				}
-				if err = doRequest(context.Background(), s, request); err != nil {
+				if err = play.DoRequest(context.Background(), s, request); err != nil {
 					return err
 				}
 			}
@@ -61,28 +69,28 @@ func (i *TcpInstance) onReady(s *play.Session) (err error) {
 	}
 }
 
-func (i *TcpInstance) Info() play.InstanceInfo {
+func (i *tcpInstance) Info() play.IInstanceInfo {
 	return i.info
 }
 
-func (i *TcpInstance) Hook() play.IServerHook {
+func (i *tcpInstance) Hook() play.IServerHook {
 	return i.hook
 }
 
-func (i *TcpInstance) Packer() play.IPacker {
+func (i *tcpInstance) Packer() play.IPacker {
 	return i.packer
 }
 
-func (i *TcpInstance) Transport(conn *play.Conn, data []byte) error {
+func (i *tcpInstance) Transport(conn *play.Conn, data []byte) error {
 	_, err := conn.Tcp.Conn.Write(data)
 	return err
 }
 
-func (i *TcpInstance) Ctrl() *play.InstanceCtrl {
+func (i *tcpInstance) Ctrl() *play.InstanceCtrl {
 	return i.ctrl
 }
 
-func (i *TcpInstance) Run(listener net.Listener, udplistener net.PacketConn) error {
+func (i *tcpInstance) Run(listener net.Listener, udplistener net.PacketConn) error {
 	for {
 		var err error
 		var conn net.Conn
@@ -117,10 +125,43 @@ func (i *TcpInstance) Run(listener net.Listener, udplistener net.PacketConn) err
 	}
 }
 
-func (i *TcpInstance) Close() {
+func (i *tcpInstance) Close() {
 	i.ctrl.WaitTask()
 }
 
-func (i *TcpInstance) Network() string {
+func (i *tcpInstance) Network() string {
 	return "tcp"
+}
+
+func (i *tcpInstance) ActionUnitNames() []string {
+	return append([]string(nil), i.sortedNames...)
+}
+
+func (i *tcpInstance) LookupActionUnit(requestName string) *play.ActionUnit {
+	return i.actions[requestName]
+}
+
+func (i *tcpInstance) BindActionSpace(spaceName string, actionPackages ...string) error {
+	return bindActionSpace(i, spaceName, actionPackages)
+}
+
+func (i *tcpInstance) UpdateActionTimeout(spaceName string, actionName string, timeout time.Duration) {
+	if spaceName != "" {
+		spaceName = spaceName + "."
+	}
+	if act := i.actions[spaceName+actionName]; act != nil {
+		act.Timeout = timeout
+	}
+}
+
+func (i *tcpInstance) AddActionUnits(units ...*play.ActionUnit) error {
+	for _, u := range units {
+		if i.actions[u.RequestName] != nil {
+			return errors.New("action unit " + u.RequestName + " is already exists in " + i.info.Name())
+		}
+		i.actions[u.RequestName] = u
+		i.sortedNames = append(i.sortedNames, u.RequestName)
+	}
+	sort.Strings(i.sortedNames)
+	return nil
 }

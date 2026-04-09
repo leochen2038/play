@@ -2,11 +2,14 @@ package mongodb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/database"
@@ -25,7 +28,7 @@ func GetConnect(ctx context.Context, router string) (*mongo.Client, error) {
 	var dbconnect *mongo.Client
 
 	if dest = database.GetDest(router); dest == "" {
-		return nil, fmt.Errorf("can not find mongodb config: " + router)
+		return nil, fmt.Errorf("can not find mongodb config: %s", router)
 	}
 	if connect, _ := dbconnects.Load(dest); connect == nil {
 		scheme := "mongodb"
@@ -104,10 +107,11 @@ func UpdateAndGetOne(dest interface{}, query *play.Query) (err error) {
 	if collection, err = getCollection(query); err != nil {
 		return
 	}
-
-	fmtime := make([]interface{}, 0, 1)
-	fmtime = append(fmtime, time.Now().Unix())
-	query.Sets["Fmtime"] = fmtime
+	if _, ok := query.Fields["Fmtime"]; ok && len(query.Sets["Fmtime"]) == 0 {
+		fmtime := make([]interface{}, 0, 1)
+		fmtime = append(fmtime, time.Now().Unix())
+		query.Sets["Fmtime"] = fmtime
+	}
 
 	filter := fetch(query)
 	update := modifier(query)
@@ -125,6 +129,20 @@ func Save(meta interface{}, upsetId *primitive.ObjectID, query *play.Query) (err
 		return
 	}
 
+	if len(query.FieldLenLimit) > 0 {
+		fieldsInfo := getFieldsAndVal(meta)
+		for k, v := range fieldsInfo {
+			if query.FieldLenLimit[k] == 0 {
+				continue
+			}
+			dataLen := utf8.RuneCountInString(v.(string))
+			if dataLen > query.FieldLenLimit[k] {
+				return errors.New("field:" + k + " length cannot exceed " + strconv.Itoa(query.FieldLenLimit[k]))
+			}
+		}
+
+	}
+
 	if upsetId == nil {
 		_, err = collection.InsertOne(query.Context, meta)
 	} else {
@@ -133,6 +151,20 @@ func Save(meta interface{}, upsetId *primitive.ObjectID, query *play.Query) (err
 	}
 
 	return
+}
+
+func getFieldsAndVal(meta interface{}) map[string]interface{} {
+	t := reflect.TypeOf(meta).Elem()
+	v := reflect.ValueOf(meta).Elem()
+	res := make(map[string]interface{})
+	for i := 0; i < t.NumField(); i++ {
+		key := t.Field(i).Tag.Get("key")
+		if key == "id" {
+			continue
+		}
+		res[key] = v.Field(i).Interface()
+	}
+	return res
 }
 
 func Delete(query *play.Query) (modcount int64, err error) {
@@ -160,9 +192,23 @@ func Update(query *play.Query) (modcount int64, err error) {
 	var result *mongo.UpdateResult
 	var collection *mongo.Collection
 
-	fmtime := make([]interface{}, 0, 1)
-	fmtime = append(fmtime, time.Now().Unix())
-	query.Sets["Fmtime"] = fmtime
+	if len(query.FieldLenLimit) > 0 {
+		for k, v := range query.Sets {
+			if query.FieldLenLimit[k] == 0 {
+				continue
+			}
+			dataLen := utf8.RuneCountInString(v[0].(string))
+			if dataLen > query.FieldLenLimit[k] {
+				return 0, errors.New("field:" + k + " length cannot exceed " + strconv.Itoa(query.FieldLenLimit[k]))
+			}
+		}
+	}
+
+	if _, ok := query.Fields["Fmtime"]; ok && len(query.Sets["Fmtime"]) == 0 {
+		fmtime := make([]interface{}, 0, 1)
+		fmtime = append(fmtime, time.Now().Unix())
+		query.Sets["Fmtime"] = fmtime
+	}
 
 	if collection, err = getCollection(query); err != nil {
 		return

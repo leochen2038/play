@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/leochen2038/play/codec/binders"
 	"github.com/quic-go/quic-go"
+	"github.com/leochen2038/play/codec/binders"
 )
 
 const (
@@ -19,6 +19,10 @@ const (
 	SERVER_TYPE_H2C   = 5
 	SERVER_TYPE_QUIC  = 6
 	SERVER_TYPE_HTTP3 = 7
+	SERVER_TYPE_MCP   = 8
+
+	MCP_TRANSPORT_STDIO           = 1
+	MCP_TRANSPORT_STREAMABLE_HTTP = 2
 )
 
 type IServerHook interface {
@@ -33,25 +37,63 @@ type IServerHook interface {
 }
 
 type IServer interface {
-	Info() InstanceInfo
+	Info() IInstanceInfo
 	Ctrl() *InstanceCtrl
 	Hook() IServerHook
 	Packer() IPacker
 	Transport(*Conn, []byte) error
 	Network() string
+	BindActionSpace(name string, actionPackages ...string) error
+	UpdateActionTimeout(spaceName string, actionName string, timeout time.Duration)
+	LookupActionUnit(name string) *ActionUnit
+	AddActionUnits(units ...*ActionUnit) error
+	ActionUnitNames() []string
 	Run(net.Listener, net.PacketConn) error
 	Close()
 }
 
 type IPacker interface {
-	Receive(c *Conn) (*Request, error)
+	Unpack(c *Conn) (*Request, error)
 	Pack(c *Conn, res *Response) ([]byte, error)
 }
 
-type InstanceInfo struct {
-	Address string
-	Name    string
-	Type    int
+type IInstanceInfo interface {
+	Address() string
+	Name() string
+	ServerType() int
+	DefaultActionTimeout() time.Duration
+}
+
+type instanceInfo struct {
+	address              string
+	name                 string
+	serverType           int
+	defaultActionTimeout time.Duration
+}
+
+func NewInstanceInfo(name string, address string, serverType int, defaultActionTimeout time.Duration) IInstanceInfo {
+	return &instanceInfo{
+		name:                 name,
+		address:              address,
+		serverType:           serverType,
+		defaultActionTimeout: defaultActionTimeout,
+	}
+}
+
+func (i *instanceInfo) Address() string {
+	return i.address
+}
+
+func (i *instanceInfo) Name() string {
+	return i.name
+}
+
+func (i *instanceInfo) ServerType() int {
+	return i.serverType
+}
+
+func (i *instanceInfo) DefaultActionTimeout() time.Duration {
+	return i.defaultActionTimeout
 }
 
 type InstanceCtrl struct {
@@ -90,6 +132,9 @@ type Conn struct {
 		Conn    quic.Connection
 		Stream  quic.Stream
 	}
+	Mcp struct {
+		Data []byte
+	}
 }
 
 type Request struct {
@@ -107,10 +152,19 @@ type Request struct {
 }
 
 type Response struct {
-	Version    byte
-	TraceId    string
-	Template   string
-	RenderName string
-	Error      error
-	Output     Output
+	Version      byte
+	TraceId      string
+	TemplateRoot string
+	Template     string
+	RenderName   string
+	Error        error
+	Output       Output
+	ResponseSize int
+}
+
+type ActionUnit struct {
+	Action      *Action
+	Space       string
+	Timeout     time.Duration
+	RequestName string
 }

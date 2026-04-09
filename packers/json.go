@@ -2,42 +2,77 @@ package packers
 
 import (
 	"errors"
-	"strconv"
+	"fmt"
 
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/codec/binders"
 	"github.com/leochen2038/play/codec/renders"
 )
 
+const (
+	renderNameJSON = "json"
+)
+
+var (
+	ErrUnsupportedType = errors.New("json packer unsupported server type")
+	ErrNilConnection   = errors.New("connection is nil")
+	ErrNilResponse     = errors.New("response is nil")
+)
+
 type JsonPacker struct {
+	httpPacker *HttpPacker
 }
 
-func NewJsonPackert() play.IPacker {
-	return new(JsonPacker)
+func NewJsonPacker() play.IPacker {
+	return &JsonPacker{
+		httpPacker: &HttpPacker{},
+	}
 }
 
-func (m *JsonPacker) Receive(c *play.Conn) (*play.Request, error) {
-	var request play.Request
-	request.RenderName = "json"
-
-	switch c.Type {
-	case play.SERVER_TYPE_HTTP, play.SERVER_TYPE_SSE, play.SERVER_TYPE_H2C, play.SERVER_TYPE_HTTP3:
-		request.ActionName, _ = ParseHttpPath(c.Http.Request.URL.Path)
-		request.InputBinder = ParseHttpInput(c.Http.Request)
-	case play.SERVER_TYPE_WS:
-		request.ActionName, _ = ParseHttpPath(c.Http.Request.URL.Path)
-		if len(c.Websocket.Message) > 0 {
-			request.InputBinder = binders.GetBinderOfJson(c.Websocket.Message)
-		} else {
-			request.InputBinder = ParseHttpInput(c.Http.Request)
-		}
-	default:
-		return nil, errors.New("json packer not support " + strconv.Itoa(c.Type) + " type")
+func (p *JsonPacker) Unpack(c *play.Conn) (*play.Request, error) {
+	if c == nil {
+		return nil, ErrNilConnection
 	}
 
-	return &request, nil
+	request := &play.Request{
+		RenderName: renderNameJSON,
+	}
+
+	switch c.Type {
+	case play.SERVER_TYPE_HTTP,
+		play.SERVER_TYPE_SSE,
+		play.SERVER_TYPE_H2C,
+		play.SERVER_TYPE_HTTP3:
+		return p.unpackHTTP(c, request)
+	case play.SERVER_TYPE_WS:
+		return p.unpackWebSocket(c, request)
+	default:
+		return nil, fmt.Errorf("%w: %d", ErrUnsupportedType, c.Type)
+	}
 }
 
-func (m *JsonPacker) Pack(c *play.Conn, res *play.Response) (data []byte, err error) {
+func (p *JsonPacker) unpackHTTP(c *play.Conn, request *play.Request) (*play.Request, error) {
+	actionName, _ := p.httpPacker.ParseHttpPath(c.Http.Request.URL.Path)
+	request.ActionName = actionName
+	request.InputBinder = p.httpPacker.ParseHttpInput(c.Http.Request)
+	return request, nil
+}
+
+func (p *JsonPacker) unpackWebSocket(c *play.Conn, request *play.Request) (*play.Request, error) {
+	actionName, _ := p.httpPacker.ParseHttpPath(c.Http.Request.URL.Path)
+	request.ActionName = actionName
+
+	if len(c.Websocket.Message) > 0 {
+		request.InputBinder = binders.GetBinderOfJson(c.Websocket.Message)
+	} else {
+		request.InputBinder = p.httpPacker.ParseHttpInput(c.Http.Request)
+	}
+	return request, nil
+}
+
+func (p *JsonPacker) Pack(c *play.Conn, res *play.Response) ([]byte, error) {
+	if res == nil {
+		return nil, ErrNilResponse
+	}
 	return renders.GetRenderOfJson().Render(res.Output.All())
 }

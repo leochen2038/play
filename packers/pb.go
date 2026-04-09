@@ -3,7 +3,7 @@ package packers
 import (
 	"encoding/binary"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,7 +24,7 @@ func NewPbPacker(fileDescriptors []protoreflect.FileDescriptor) play.IPacker {
 	return &PbPacker{fileDescriptors: fileDescriptors}
 }
 
-func (p *PbPacker) Receive(c *play.Conn) (*play.Request, error) {
+func (p *PbPacker) Unpack(c *play.Conn) (*play.Request, error) {
 	var err error
 	var request play.Request
 	request.RenderName = "pb"
@@ -76,7 +76,7 @@ func getBinderOfProtobuf(request *http.Request, fileDescriptors []protoreflect.F
 	}
 	msg := dynamicpb.NewMessage(descriptor)
 
-	data, err := ioutil.ReadAll(request.Body)
+	data, err := io.ReadAll(request.Body)
 	if err != nil {
 		return nil, errors.New("read grpc request message err:" + err.Error())
 	}

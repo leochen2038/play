@@ -2,7 +2,6 @@ package action
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,7 +26,8 @@ func ReconstAction() (err error) {
 	for _, action := range actions {
 		emptyAction = false
 		metaData := genActionMetaStruct(action.metaData)
-		registerCode += "\tplay.RegisterAction(\"" + action.name + "\", " + metaData + ", func()interface{}{return "
+		registerCode += "\tplay.RegisterAction(\"" + action.packageName + "\", \"" + action.name + "\", " + metaData + ", func()interface{}{return "
+
 		genNextProcessorCode(action.handlerList, &action)
 		registerCode = registerCode[:len(registerCode)-1] + "})\n"
 	}
@@ -55,7 +55,7 @@ func ReconstAction() (err error) {
 func genActionMetaStruct(metaData map[string]string) string {
 	var metaStruct string = `map[string]string{`
 	for k, v := range metaData {
-		metaStruct += fmt.Sprintf("\"%s\":\"%s\",", k, v)
+		metaStruct += fmt.Sprintf("\"%s\":`%s`,", k, v)
 	}
 	if len(metaData) > 0 {
 		metaStruct = metaStruct[:len(metaStruct)-1]
@@ -70,7 +70,7 @@ func genRegisterCronCode(path string) (registCode string) {
 	filepath.Walk(path, func(filename string, info os.FileInfo, err error) error {
 		if info != nil && !info.IsDir() && len(info.Name()) > 3 && filepath.Ext(info.Name()) == ".go" {
 			var packageName string
-			code, _ := ioutil.ReadFile(filename)
+			code, _ := os.ReadFile(filename)
 			submath := reJob.FindAllSubmatch(code, -1)
 			if len(submath) > 0 {
 				submath := rePack.FindSubmatch(code)
@@ -142,6 +142,7 @@ func updateRegister(project, frameworkName string, emptyAction bool) (err error)
 	for k, v := range packages {
 		src += fmt.Sprintf("\t%s \"%s/processor/%s\"\n", v, module, k)
 	}
+	// src += "\"reflect\"\n"
 	src += "\"runtime\"\n"
 	src += "\"strings\"\n"
 	if len(packages) > 0 {
@@ -153,7 +154,7 @@ func updateRegister(project, frameworkName string, emptyAction bool) (err error)
 
 	src += registerCode
 	path := fmt.Sprintf("%s/init.go", project)
-	if err = ioutil.WriteFile(path, []byte(src), 0644); err != nil {
+	if err = os.WriteFile(path, []byte(src), 0644); err != nil {
 		return
 	}
 

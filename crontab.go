@@ -60,6 +60,17 @@ func CronStartWithFile(filename string, refashTickTime time.Duration) (err error
 	return
 }
 
+func CronUpdateWithJson(data []byte) (err error) {
+	var config map[string]string
+	if err = json.Unmarshal(data, &config); err != nil {
+		return
+	}
+	if len(config) > 0 {
+		return _cronUpdate(config)
+	}
+	return
+}
+
 func startCronWatchFileChange(filename string, refashTickTime time.Duration) {
 	go func() {
 		defer func() {

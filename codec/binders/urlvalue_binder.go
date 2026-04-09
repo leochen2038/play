@@ -65,7 +65,7 @@ func (b urlValueBinder) bindValue(v reflect.Value, s reflect.StructField, preKey
 			}
 		} else {
 			for _, ikey := range b.keys {
-				if ikey == ckey {
+				if ikey == ckey || strings.HasPrefix(ikey, ckey+"[") {
 					skey = ikey
 					break
 				}
@@ -88,6 +88,8 @@ func (b urlValueBinder) bindValue(v reflect.Value, s reflect.StructField, preKey
 	case reflect.Struct:
 		if s.Type.String() == "time.Time" {
 			return setValWithString(v, s, b.values.Get(skey))
+		} else if s.Type.String() == "binders.File" {
+			return setValWithFile(v, b.files[skey])
 		} else {
 			return b.bindStructWithUrlValue(v, ckey)
 		}

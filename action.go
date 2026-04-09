@@ -6,31 +6,32 @@ import (
 	"fmt"
 	"reflect"
 	"runtime/debug"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
-	"github.com/leochen2038/play/logger"
+	"github.com/leochen2038/play/codec/protos/golang/json"
 )
 
 type Action struct {
 	name          string
-	subsidiary    string
+	packageName   string
 	metaData      map[string]string
 	timeout       time.Duration
 	instancesPool sync.Pool
 	newHandle     func() interface{}
 	input         map[string]ActionField
 	output        map[string]ActionField
+	example       string
 }
 
 type ActionField struct {
 	Field      string
 	Keys       []string
 	Tags       map[string]string
+	Sort       int
 	Typ        string
 	OriginType string
 	Desc       string
@@ -57,22 +58,22 @@ func (act *Action) Input() map[string]ActionField {
 func (act *Action) Output() map[string]ActionField {
 	return act.output
 }
+func (act *Action) Example() string {
+	return act.example
+}
 
-var ActionDefaultTimeout time.Duration = 500 * time.Millisecond
-var actions = make(map[string]*Action, 32)
+var actions []*Action
 
 type Processor interface {
 	Run(ctx *Context) (string, error)
 }
 
-func SetActionTimeout(name string, timeout time.Duration) {
-	if v, ok := actions[name]; ok {
-		v.timeout = timeout
-	}
-}
-
 func NewProcessorWrap(handle interface{ Processor }, run func(p Processor, ctx *Context) (string, error), next map[string]*ProcessorWrap) *ProcessorWrap {
-	return &ProcessorWrap{p: handle, run: run, next: next}
+	return &ProcessorWrap{
+		p:    handle,
+		run:  run,
+		next: next,
+	}
 }
 
 type ProcessorWrap struct {
@@ -81,101 +82,104 @@ type ProcessorWrap struct {
 	next map[string]*ProcessorWrap
 }
 
-func RegisterAction(name string, metaData map[string]string, new func() interface{}) {
-	actions[name] = &Action{
+func RegisterAction(packageName, name string, metaData map[string]string, new func() interface{}) {
+	actions = append(actions, &Action{
 		name:          name,
+		packageName:   packageName,
 		metaData:      metaData,
 		instancesPool: sync.Pool{New: new},
 		newHandle:     new,
 		input:         parseParameter(new().(*ProcessorWrap), "Input"),
 		output:        parseParameter(new().(*ProcessorWrap), "Output"),
-	}
+		example:       parseExample(new().(*ProcessorWrap), "Output"),
+	})
 }
 
 func RunProcessor(s unsafe.Pointer, n uintptr, p Processor, ctx *Context) (string, error) {
-	if n > 0 {
-		var i uintptr
-		ptr := uintptr(s)
-		for i = 0; i < n; i++ {
-			*(*byte)(unsafe.Pointer(ptr + i)) = 0
-		}
-		vInput := reflect.ValueOf(p).Elem().FieldByName("Input")
-		if err := ctx.Input.Bind(vInput); err != nil {
-			return "", err
-		}
+	// if n > 0 {
+	// 	var i uintptr
+	// 	ptr := uintptr(s)
+	// 	for i = 0; i < n; i++ {
+	// 		*(*byte)(unsafe.Pointer(ptr + i)) = 0
+	// 	}
+	// }
+
+	vInput := reflect.ValueOf(p).Elem().FieldByName("Input")
+	if err := ctx.Input.Bind(vInput); err != nil {
+		return "", err
 	}
 	return p.Run(ctx)
 }
 
-// CallAction 消化其他错误，返回框架层面错误及其他panic
-func CallAction(gctx context.Context, s *Session, request *Request) (err error) {
-	var act *Action
-	var timeout time.Duration = ActionDefaultTimeout
-	hook := s.Server.Hook()
+// DoRequest 消化其他错误，返回框架层面错误及其他panic
+func DoRequest(gctx context.Context, s *Session, request *Request) (err error) {
+	s.Server.Ctrl().AddTask()
+	defer func() {
+		s.Server.Ctrl().DoneTask()
+	}()
 
-	if act = actions[request.ActionName]; act != nil && act.timeout > 0 {
-		timeout = act.timeout
+	var ihandler interface{}
+	actionTimeout := 500 * time.Millisecond
+	actionExist := false
+	actUnit := s.Server.LookupActionUnit(request.ActionName)
+	if actUnit != nil {
+		actionExist = true
+		ihandler = actUnit.Action.newHandle()
+		// ihandler = actUnit.Action.instancesPool.Get()
+		// if ihandler == nil {
+		// 	return errors.New("can not get action handle from pool:" + request.ActionName)
+		// }
+		actionTimeout = actUnit.Timeout
 	}
-	ctx := NewPlayContext(gctx, s, request, timeout)
+	ctx := NewPlayContext(gctx, s, request, actionTimeout)
+	ctx.ActionRequest.ActionExist = actionExist
 
-	// defer func() {
-	// 	if r := recover(); r != nil {
-	// 		err = fmt.Errorf("panic: %v", r)
-	// 	}
-	// }()
+	hook := ctx.Session.Server.Hook()
 
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
 			ctx.err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
 		}
-		ctx.finish()
+		ctx.Finish()
 		go func() {
 			defer func() {
-				if panicInfo := recover(); panicInfo != nil {
-					logger.System("panic on hook.OnFinish", "panicInfo", panicInfo, "stack", string(debug.Stack()))
-				}
+				recover()
+				// if ihandler != nil {
+				// 	actUnit.Action.instancesPool.Put(ihandler)
+				// }
 			}()
 			hook.OnFinish(ctx)
-			// ctx.gcfunc()
 		}()
 	}()
 
-	if ctx.err = hook.OnRequest(ctx); ctx.Err() == nil {
-		run(act, ctx)
+	if ctx.err = hook.OnRequest(ctx); ctx.Err() == nil && !ctx.isFinish {
+		if !actionExist {
+			ctx.err = errors.New("can not find action:" + ctx.ActionRequest.Name)
+		} else {
+			RunProcessorWrap(ihandler.(*ProcessorWrap), ctx)
+		}
 	}
 
 	if !ctx.ActionRequest.NonRespond {
 		if hook.OnResponse(ctx); !ctx.ActionRequest.NonRespond {
 			ctx.Response.Error = ctx.err
-			if e := s.Write(&ctx.Response); e != nil {
+			if e := ctx.Session.Write(&ctx.Response); e != nil {
 				ctx.err = e
 			}
 		}
 	}
+
 	return
 }
 
-func run(act *Action, ctx *Context) {
+func RunProcessorWrap(currentHandler *ProcessorWrap, ctx *Context) {
 	var flag string
 	defer func() {
 		if panicInfo := recover(); panicInfo != nil {
 			ctx.err = fmt.Errorf("panic: %v\n%v", panicInfo, string(debug.Stack()))
 		}
 	}()
-	if act == nil {
-		ctx.err = errors.New("can not find action:" + ctx.ActionRequest.Name)
-		return
-	}
 
-	ihandler := act.instancesPool.Get()
-	if ihandler == nil {
-		ctx.err = errors.New("can not get action handle from pool:" + ctx.ActionRequest.Name)
-		return
-	} else {
-		defer act.instancesPool.Put(ihandler)
-	}
-
-	currentHandler := ihandler.(*ProcessorWrap)
 	for ok := true; ok; currentHandler, ok = currentHandler.next[flag] {
 		flag, ctx.err = currentHandler.run(currentHandler.p, ctx)
 		if ctx.Err() != nil {
@@ -198,24 +202,14 @@ func run(act *Action, ctx *Context) {
 	}
 }
 
-func GetAction(name string) *Action {
-	return actions[name]
-}
-
-func WalkAction(DoTask func(action *Action) error) error {
-	var names []string
-	for name := range actions {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		if err := DoTask(actions[name]); err != nil {
-			fmt.Println("DoTask error:", err)
-			return err
+func ActionsByPackage(packageName string) []*Action {
+	var result []*Action
+	for _, action := range actions {
+		if action.packageName == packageName {
+			result = append(result, action)
 		}
 	}
-	return nil
+	return result
 }
 
 func parseParameter(handle *ProcessorWrap, field string) map[string]ActionField {
@@ -280,7 +274,11 @@ func parserField(value reflect.Value) map[string]ActionField {
 		if len(structKey) > 0 {
 			field.Keys = strings.Split(structKey, ",")
 		}
+		if len(structNote) == 0 {
+			structNote = structType.Tag.Get("label")
+		}
 
+		field.Sort = i
 		field.Field = structType.Name
 		field.Tags = TagLookup(string(structType.Tag))
 		field.Typ = structType.Type.String()
@@ -385,4 +383,106 @@ func TagLookup(tag string) (res map[string]string) {
 		res[name], _ = strconv.Unquote(qvalue)
 	}
 	return
+}
+
+func parseExample(handle *ProcessorWrap, field string) string {
+	data := fillExample(handle, field)
+	bytes, _ := json.MarshalIndent(data, "", "    ")
+	return string(bytes)
+}
+
+func fillExample(handle *ProcessorWrap, field string) map[string]interface{} {
+	data := make(map[string]interface{}, 10)
+
+	v := reflect.ValueOf(handle.p).Elem().FieldByName(field)
+	if v.CanSet() {
+		var tField reflect.StructField
+		var vField reflect.Value
+		var fieldCount = v.Type().NumField()
+		for i := 0; i < fieldCount; i++ {
+			if vField, tField = v.Field(i), v.Type().Field(i); !vField.CanInterface() {
+				continue
+			}
+
+			switch tField.Type.Kind() {
+			case reflect.Struct:
+				fillStruct(vField)
+			case reflect.Slice:
+				fillSlice(vField)
+			case reflect.Map:
+				fillMap(vField)
+			case reflect.Ptr:
+				fillPtr(vField)
+			}
+
+			key := tField.Tag.Get("key")
+			if key == "" {
+				key = tField.Name
+			}
+			data[key] = vField.Interface()
+		}
+	}
+
+	for _, next := range handle.next {
+		for key, val := range fillExample(next, field) {
+			data[key] = val
+		}
+	}
+	return data
+}
+
+func fillStruct(v reflect.Value) {
+	if v.CanSet() {
+		var tField reflect.StructField
+		var vField reflect.Value
+
+		var fieldCount = v.Type().NumField()
+		for i := 0; i < fieldCount; i++ {
+			if vField, tField = v.Field(i), v.Type().Field(i); !vField.CanInterface() {
+				continue
+			}
+
+			switch tField.Type.Kind() {
+			case reflect.Struct:
+				fillStruct(vField)
+			case reflect.Slice:
+				fillSlice(vField)
+			case reflect.Map:
+				fillMap(vField)
+			case reflect.Ptr:
+				fillPtr(vField)
+			}
+		}
+	}
+}
+
+func fillSlice(vField reflect.Value) {
+	if vField.Type().Elem().Kind() == reflect.Struct {
+		v := reflect.Indirect(reflect.New(vField.Type().Elem()))
+		fillStruct(v)
+		vField.Set(reflect.Append(vField, v))
+	} else if vField.Type().Elem().Kind() == reflect.Map {
+		v := reflect.MakeMap(vField.Type().Elem())
+		vField.Set(reflect.Append(vField, v))
+	} else if vField.Type().Elem().Kind() == reflect.Ptr {
+		v := reflect.Indirect(reflect.New(vField.Type().Elem()))
+		fillPtr(v)
+		vField.Set(reflect.Append(vField, v))
+	} else {
+		v := reflect.Indirect(reflect.New(vField.Type().Elem()))
+		vField.Set(reflect.Append(vField, v))
+	}
+}
+
+func fillMap(vField reflect.Value) {
+	vField.Set(reflect.MakeMap(vField.Type()))
+}
+
+func fillPtr(vField reflect.Value) {
+	if vField.Type().Elem().Kind() == reflect.Struct {
+		vField.Set(reflect.New(vField.Type().Elem()))
+		v := reflect.Indirect(reflect.New(vField.Type().Elem()))
+		fillStruct(v)
+		vField.Elem().Set(v)
+	}
 }

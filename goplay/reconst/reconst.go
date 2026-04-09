@@ -35,8 +35,14 @@ func parseModuleName(path string) (string, error) {
 	}
 
 	file, err := os.Open(modPath)
+	if err != nil {
+		return "", err
+	}
 	br := bufio.NewReader(file)
 	data, _, err := br.ReadLine()
+	if err != nil {
+		return "", err
+	}
 
 	return strings.Split(string(data), " ")[1], nil
 }

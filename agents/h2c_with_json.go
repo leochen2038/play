@@ -3,15 +3,10 @@ package agents
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strings"
-	"time"
-
-	"golang.org/x/net/http2"
 
 	"github.com/leochen2038/play/codec/protos/golang/json"
 )
@@ -23,6 +18,9 @@ type h2cWithJson struct {
 }
 
 func (a *h2cWithJson) SetRouter(servie string, host string) {
+	if !strings.Contains(host, "http") {
+		host = "http://" + host
+	}
 	a.router[servie] = host
 }
 
@@ -43,14 +41,7 @@ func (a *h2cWithJson) Request(ctx context.Context, service string, action string
 
 	req.Header.Set("Content-Type", "application/json")
 
-	transport := &http2.Transport{
-		AllowHTTP: true,
-		DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
-			return net.Dial(network, addr)
-		},
-	}
-
-	client := &http.Client{Transport: transport, Timeout: 500 * time.Millisecond}
+	client := getClient()
 	if resp, err = client.Do(req); err != nil {
 		return nil, err
 	}

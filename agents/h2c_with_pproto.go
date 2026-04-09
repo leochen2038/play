@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -79,7 +79,7 @@ func (a *h2cPProtoAgent) Request(ctx context.Context, service string, action str
 		return nil, errors.New("http status error:" + resp.Status)
 	}
 
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 func (a *h2cPProtoAgent) Marshal(ctx context.Context, service string, action string, i interface{}) ([]byte, error) {

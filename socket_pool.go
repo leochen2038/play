@@ -9,12 +9,12 @@ import (
 )
 
 type GroupSocket struct {
-	mu          sync.Mutex
-	groups      map[string]*socketWeightPool
-	maxIdle     int           // 连接池中每台服务器最大空闲连接数
-	maxConn     int           // 连接池中每台服务器最多连接数 0：表示不限制
-	maxWaitTime time.Duration //获取连接最大等待时间 0：表示不限制
-	hosts       map[string]map[string]int
+	mu      sync.Mutex
+	groups  map[string]*socketWeightPool
+	maxIdle int // 连接池中每台服务器最大空闲连接数
+	// maxConn     int           // 连接池中每台服务器最多连接数 0：表示不限制
+	// maxWaitTime time.Duration //获取连接最大等待时间 0：表示不限制
+	hosts map[string]map[string]int
 }
 
 type socketWeightPool struct {

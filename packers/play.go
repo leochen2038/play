@@ -63,7 +63,7 @@ func NewPlayPacker() play.IPacker {
 	return new(PlayPacker)
 }
 
-func (p *PlayPacker) Receive(c *play.Conn) (*play.Request, error) {
+func (p *PlayPacker) Unpack(c *play.Conn) (*play.Request, error) {
 	var err error
 	var dataSize uint32
 	var protocol pproto.PlayProtocolRequest
@@ -121,7 +121,7 @@ func (p *PlayPacker) Pack(c *play.Conn, res *play.Response) (data []byte, err er
 		}
 	}
 	if len(res.Output.All()) > 0 {
-		if body, _ = renders.GetRenderOfJson().Render(res.Output.All()); err != nil {
+		if body, err = renders.GetRenderOfJson().Render(res.Output.All()); err != nil {
 			return nil, err
 		}
 	}

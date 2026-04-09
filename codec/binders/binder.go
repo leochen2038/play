@@ -2,6 +2,8 @@ package binders
 
 import (
 	"errors"
+	"io"
+	"mime/multipart"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -19,6 +21,12 @@ type Binder interface {
 	Name() string
 	Bind(v reflect.Value, s reflect.StructField) error
 	Get(key string) interface{}
+}
+
+type File struct {
+	Name string
+	Data []byte
+	Size int64
 }
 
 func parseSliceKey(k string, c string) (string, error) {
@@ -74,6 +82,28 @@ func setValWithString(vField reflect.Value, tField reflect.StructField, str stri
 	} else {
 		vField.Set(reflect.ValueOf(val))
 	}
+	return nil
+}
+
+func setValWithFile(vField reflect.Value, fHeaders []*multipart.FileHeader) (err error) {
+	if len(fHeaders) == 0 {
+		return nil
+	}
+	fHeader := fHeaders[0]
+	var f multipart.File
+	file := File{
+		Name: fHeader.Filename,
+		Size: fHeader.Size,
+		Data: make([]byte, fHeader.Size),
+	}
+	if f, err = fHeader.Open(); err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err = io.ReadFull(f, file.Data); err != nil {
+		return err
+	}
+	vField.Set(reflect.ValueOf(file))
 	return nil
 }
 

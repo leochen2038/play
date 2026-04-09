@@ -17,7 +17,7 @@ type Session struct {
 
 func NewSession(cxt context.Context, server IServer) *Session {
 	sess := &Session{
-		Conn:   &Conn{Type: server.Info().Type},
+		Conn:   &Conn{Type: server.Info().ServerType()},
 		SessId: uuid.New().String(),
 		Server: server,
 	}
@@ -30,6 +30,9 @@ func (s *Session) Write(res *Response) (err error) {
 		var data []byte
 		if data, err = s.Server.Packer().Pack(s.Conn, res); err == nil && len(data) > 0 {
 			err = s.Server.Transport(s.Conn, data)
+			if err == nil {
+				res.ResponseSize = len(data)
+			}
 		}
 	}
 

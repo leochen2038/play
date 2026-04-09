@@ -17,13 +17,10 @@ func generateMysqlTable(meta Meta) string {
 func getMysqlType(typeName string, length int) string {
 	switch typeName {
 	case "string":
-		if length >= 0 {
+		if length > 0 {
 			return "VARCHAR(" + strconv.Itoa(length) + ")"
 		}
-		if length < 0 {
-			return "TEXT"
-		}
-		return "VARCHAR(4096)"
+		return "TEXT"
 	case "int":
 		return "INT(11)"
 	case "auto":

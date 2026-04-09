@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/leochen2038/play/logger"
 )
 
 var (
@@ -33,6 +31,7 @@ func NewTraceId() string {
 type actionRequest struct {
 	CallerId    int
 	Name        string
+	ActionExist bool
 	RequestTime time.Time
 	Timeout     time.Duration
 	NonRespond  bool
@@ -57,7 +56,6 @@ type Context struct {
 	Response      Response
 	Session       *Session
 	Trace         *TraceContext
-	Logger        lcx
 	FinishTime    time.Time
 	isFinish      bool
 	err           error
@@ -98,16 +96,11 @@ func NewPlayContext(parent context.Context, s *Session, request *Request, timeou
 		Template:   strings.ReplaceAll(request.ActionName, ".", "/"),
 	}
 
-	var l = lcx{
-		traceId: traceId,
-		action:  request.ActionName,
-	}
 	return &Context{
 		ActionRequest: action,
 		Input:         NewInput(request.InputBinder),
 		Response:      response,
 		Trace:         &trace,
-		Logger:        l,
 		Session:       s,
 		gctx:          gctx,
 		gcfunc:        gcfunc,
@@ -122,13 +115,15 @@ func (c *Context) Deadline() (deadline time.Time, ok bool) {
 	return c.gctx.Deadline()
 }
 
-func (c *Context) finish() {
-	c.isFinish = true
-	c.FinishTime = time.Now()
-	if c.err == nil {
-		c.err = c.gctx.Err()
+func (c *Context) Finish() {
+	if !c.isFinish {
+		c.isFinish = true
+		c.FinishTime = time.Now()
+		if c.err == nil {
+			c.err = c.gctx.Err()
+		}
+		c.gcfunc()
 	}
-	c.gcfunc()
 }
 
 func (c *Context) Err() error {
@@ -194,57 +189,4 @@ func GetGoroutineID() uint64 {
 	b = b[:bytes.IndexByte(b, ' ')]
 	n, _ := strconv.ParseUint(string(b), 10, 64)
 	return n
-}
-
-type lcx struct {
-	action  string
-	traceId string
-}
-
-func (l lcx) Info(k string, v interface{}, kv ...interface{}) {
-	logger.Write(logger.LEVEL_INFO, time.Now(), l.traceId, l.action, getFile(), k, v, getAttach(kv))
-}
-
-func (l lcx) Debug(k string, v interface{}, kv ...interface{}) {
-	logger.Write(logger.LEVEL_DEBUG, time.Now(), l.traceId, l.action, getFile(), k, v, getAttach(kv))
-}
-
-func (l lcx) Warn(k string, v interface{}, kv ...interface{}) {
-	logger.Write(logger.LEVEL_WARN, time.Now(), l.traceId, l.action, getFile(), k, v, getAttach(kv))
-}
-
-func (l lcx) Error(err error, kv ...interface{}) {
-	var t time.Time
-	var file string
-	var attach = getAttach(kv)
-
-	if e, ok := err.(Err); ok {
-		attach["code"] = e.Code
-		attach["track"] = e.Track()[1:]
-		for k, v := range e.Attach() {
-			attach[k] = v
-		}
-		t, file = e.Time(), e.Track()[0]
-	} else {
-		t, file = time.Now(), getFile()
-	}
-	logger.Write(logger.LEVEL_ERROR, t, l.traceId, l.action, file, "error", err.Error(), attach)
-}
-
-func getFile() string {
-	funcptr, file, line, _ := runtime.Caller(2)
-	funcName := runtime.FuncForPC(funcptr).Name()
-	return fmt.Sprintf(`%s:%d->%s()`, strings.Replace(file, BuildBasePath, "", 1), line, funcName[strings.Index(funcName, ".")+1:])
-}
-
-func getAttach(kv []interface{}) map[string]interface{} {
-	attach := make(map[string]interface{})
-	len := len(kv) - 1
-
-	for i := 0; i < len; i += 2 {
-		if v, ok := kv[i].(string); ok {
-			attach[v] = kv[i+1]
-		}
-	}
-	return attach
 }

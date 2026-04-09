@@ -7,38 +7,44 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
 	"runtime/debug"
+	"sort"
 	"time"
 
+	"github.com/quic-go/quic-go"
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/packers"
-	"github.com/quic-go/quic-go"
 )
 
 type quicInstance struct {
-	info       play.InstanceInfo
-	hook       play.IServerHook
-	ctrl       *play.InstanceCtrl
-	packer     play.IPacker
-	quicConfig *quic.Config
-	tlsconfig  *tls.Config
-	onceStream bool
-	isClose    bool
-	quicServer quic.Listener
+	info        play.IInstanceInfo
+	hook        play.IServerHook
+	ctrl        *play.InstanceCtrl
+	packer      play.IPacker
+	quicConfig  *quic.Config
+	tlsconfig   *tls.Config
+	onceStream  bool
+	isClose     bool
+	actions     map[string]*play.ActionUnit
+	sortedNames []string
+	quicServer  *quic.Listener
 }
 
-func NewQuicInstance(name string, addr string, hook play.IServerHook, packer play.IPacker) *quicInstance {
+func NewQuicInstance(name string, addr string, hook play.IServerHook, packer play.IPacker, defaultActionTimeout time.Duration) *quicInstance {
 	if packer == nil {
 		packer = packers.NewPlayPacker()
 	}
 	if hook == nil {
 		hook = defaultHook{}
 	}
-
-	return &quicInstance{onceStream: true, info: play.InstanceInfo{Name: name, Address: addr, Type: play.SERVER_TYPE_QUIC}, packer: packer, hook: hook, ctrl: new(play.InstanceCtrl)}
+	if defaultActionTimeout == 0 {
+		defaultActionTimeout = defaultTimeout
+	}
+	return &quicInstance{onceStream: true, info: play.NewInstanceInfo(name, addr, play.SERVER_TYPE_QUIC, defaultActionTimeout), packer: packer, hook: hook, ctrl: new(play.InstanceCtrl), actions: make(map[string]*play.ActionUnit)}
 }
 
 func (i *quicInstance) SetTlsConfig(tlsconfig *tls.Config) {
@@ -49,7 +55,7 @@ func (i *quicInstance) SetQuicConfig(config *quic.Config) {
 	i.quicConfig = config
 }
 
-func (i *quicInstance) Info() play.InstanceInfo {
+func (i *quicInstance) Info() play.IInstanceInfo {
 	return i.info
 }
 
@@ -86,7 +92,7 @@ func (i *quicInstance) Network() string {
 func (i *quicInstance) Run(listener net.Listener, udplistener net.PacketConn) (err error) {
 	var tlsconfig *tls.Config
 	if i.tlsconfig == nil {
-		tlsconfig = generateTLSConfig([]string{i.info.Name})
+		tlsconfig = generateTLSConfig([]string{i.info.Name()})
 	}
 	i.quicServer, err = quic.Listen(udplistener, tlsconfig, i.quicConfig)
 
@@ -159,13 +165,13 @@ func (i *quicInstance) Run(listener net.Listener, udplistener net.PacketConn) (e
 
 func (i *quicInstance) onReadyOnce(s *play.Session) (err error) {
 	var request *play.Request
-	if request, err = i.packer.Receive(s.Conn); err != nil {
+	if request, err = i.packer.Unpack(s.Conn); err != nil {
 		return
 	}
 
 	s.Conn.Quic.Stream.CancelRead(0)
 	s.Conn.Quic.Version = request.Version
-	if err = doRequest(context.Background(), s, request); err != nil {
+	if err = play.DoRequest(context.Background(), s, request); err != nil {
 		return err
 	}
 	s.Conn.Quic.Stream = nil
@@ -179,7 +185,7 @@ func (i *quicInstance) onReady(s *play.Session) (err error) {
 		if i.isClose {
 			s.Conn.Quic.Stream.CancelRead(0)
 		}
-		if request, err = i.packer.Receive(s.Conn); err != nil {
+		if request, err = i.packer.Unpack(s.Conn); err != nil {
 			return
 		}
 		if request == nil {
@@ -188,7 +194,7 @@ func (i *quicInstance) onReady(s *play.Session) (err error) {
 		if request.Version > s.Conn.Quic.Version {
 			s.Conn.Quic.Version = request.Version
 		}
-		if err = doRequest(context.Background(), s, request); err != nil {
+		if err = play.DoRequest(context.Background(), s, request); err != nil {
 			return
 		}
 	}
@@ -225,4 +231,37 @@ func generateTLSConfig(protos []string) *tls.Config {
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   protos,
 	}
+}
+
+func (i *quicInstance) ActionUnitNames() []string {
+	return append([]string(nil), i.sortedNames...)
+}
+
+func (i *quicInstance) LookupActionUnit(requestName string) *play.ActionUnit {
+	return i.actions[requestName]
+}
+
+func (i *quicInstance) BindActionSpace(spaceName string, actionPackages ...string) error {
+	return bindActionSpace(i, spaceName, actionPackages)
+}
+
+func (i *quicInstance) UpdateActionTimeout(spaceName string, actionName string, timeout time.Duration) {
+	if spaceName != "" {
+		spaceName = spaceName + "."
+	}
+	if act := i.actions[spaceName+actionName]; act != nil {
+		act.Timeout = timeout
+	}
+}
+
+func (i *quicInstance) AddActionUnits(units ...*play.ActionUnit) error {
+	for _, u := range units {
+		if i.actions[u.RequestName] != nil {
+			return errors.New("action unit " + u.RequestName + " is already exists in " + i.info.Name())
+		}
+		i.actions[u.RequestName] = u
+		i.sortedNames = append(i.sortedNames, u.RequestName)
+	}
+	sort.Strings(i.sortedNames)
+	return nil
 }

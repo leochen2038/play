@@ -116,15 +116,6 @@ func createHook() (err error) {
 	return
 }
 
-// func createTransport() (err error) {
-// 	if err = os.Mkdir(env.ProjectPath+"/transport", 0744); err != nil {
-// 		return
-// 	}
-// 	code := getHttpTransportTpl()
-// 	err = ioutil.WriteFile(env.ProjectPath+"/transport/http.go", []byte(code), 0644)
-// 	return
-// }
-
 func createUtils() (err error) {
 	return os.Mkdir(env.ProjectPath+"/utils", 0744)
 }

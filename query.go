@@ -21,6 +21,7 @@ type Query struct {
 	Conditions    []Condition
 	Sets          map[string][]interface{}
 	Fields        map[string]struct{}
+	FieldLenLimit map[string]int
 	Order         [][2]string
 	Limit         [2]int64
 	Group         []string

@@ -2,7 +2,6 @@ package action
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"regexp"
@@ -37,7 +36,7 @@ func genFile(src string) (err error) {
 		return
 	}
 	filePath := fmt.Sprintf("%s/library/callers/%s.go", env.ProjectPath, strings.ToLower(env.ModuleName))
-	if err = ioutil.WriteFile(filePath, []byte(src), 0644); err != nil {
+	if err = os.WriteFile(filePath, []byte(src), 0644); err != nil {
 		return
 	}
 	if err = exec.Command(runtime.GOROOT()+"/bin/gofmt", "-w", filePath).Run(); err != nil {
@@ -93,7 +92,7 @@ func getFields(handler *processorHandler, input, output map[string]string) {
 	filename := fmt.Sprintf("%s/processor/%s.go", env.ProjectPath, strings.ReplaceAll(handler.name, ".", "/"))
 	pk := strings.Split(handler.name, ".")
 	typeName := pk[len(pk)-1]
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return
 	}
@@ -207,7 +206,6 @@ func parseLine(line string, parse *Parse, parseMap map[string]ParseMap, input, o
 					}
 				}
 			}
-			break
 		case 1:
 			line = strings.TrimSpace(line)
 			if line != "" {
@@ -219,14 +217,12 @@ func parseLine(line string, parse *Parse, parseMap map[string]ParseMap, input, o
 					parseLine(line[ii:], parse, parseMap, input, output)
 				}
 			}
-			break
 		case 2:
 			line = strings.TrimSpace(line)
 			if line != "" && line[0] == '{' {
 				parse.Tag = 3
 				parseLine(line[1:], parse, parseMap, input, output)
 			}
-			break
 		case 3:
 			line = strings.TrimSpace(line)
 			if line != "" {
@@ -254,14 +250,12 @@ func parseLine(line string, parse *Parse, parseMap map[string]ParseMap, input, o
 					parse.CurStruct = ""
 				}
 			}
-			break
 		case 4:
 			line = strings.TrimSpace(line)
 			if line != "" && line[0] == '{' {
 				parse.Tag = 5
 				parseLine(line[1:], parse, parseMap, input, output)
 			}
-			break
 		case 5:
 			line = strings.TrimSpace(line)
 			if line != "" {
@@ -296,7 +290,6 @@ func parseLine(line string, parse *Parse, parseMap map[string]ParseMap, input, o
 					parse.CurMap = 0
 				}
 			}
-			break
 		case 6:
 			if line != "" {
 				var index int
@@ -367,7 +360,6 @@ func parseLine(line string, parse *Parse, parseMap map[string]ParseMap, input, o
 					parse.Value = append(parse.Value, '\n')
 				}
 			}
-			break
 		case 7:
 			if line != "" {
 				var index int
@@ -403,7 +395,6 @@ func parseLine(line string, parse *Parse, parseMap map[string]ParseMap, input, o
 					parse.Value = append(parse.Value, '\n')
 				}
 			}
-			break
 		}
 	}
 }

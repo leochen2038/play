@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"runtime/debug"
+	"sort"
 	"time"
 
 	"github.com/leochen2038/play"
@@ -17,25 +18,29 @@ import (
 )
 
 type h2cInstance struct {
-	info   play.InstanceInfo
-	hook   play.IServerHook
-	ctrl   *play.InstanceCtrl
-	packer play.IPacker
-
+	info        play.IInstanceInfo
+	hook        play.IServerHook
+	ctrl        *play.InstanceCtrl
+	packer      play.IPacker
+	actions     map[string]*play.ActionUnit
+	sortedNames []string
 	tlsConfig   *tls.Config
 	httpServer  http.Server
 	http2server http2.Server
 }
 
-func NewH2cInstance(name string, addr string, hook play.IServerHook, packer play.IPacker) *h2cInstance {
+func NewH2cInstance(name string, addr string, hook play.IServerHook, packer play.IPacker, defaultActionTimeout time.Duration) *h2cInstance {
 	if packer == nil {
-		packer = packers.NewHttpPackert()
+		packer = packers.NewHttpPacker()
 	}
 	if hook == nil {
 		hook = defaultHook{}
 	}
-	return &h2cInstance{info: play.InstanceInfo{Name: name, Address: addr, Type: play.SERVER_TYPE_H2C}, packer: packer,
-		hook: hook, ctrl: new(play.InstanceCtrl)}
+	if defaultActionTimeout == 0 {
+		defaultActionTimeout = defaultTimeout
+	}
+	return &h2cInstance{info: play.NewInstanceInfo(name, addr, play.SERVER_TYPE_H2C, defaultActionTimeout), packer: packer,
+		hook: hook, ctrl: new(play.InstanceCtrl), actions: make(map[string]*play.ActionUnit)}
 }
 
 func (i *h2cInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -56,10 +61,10 @@ func (i *h2cInstance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		i.hook.OnClose(sess, err)
 	}()
 	i.hook.OnConnect(sess, nil)
-	if request, err = i.packer.Receive(sess.Conn); err != nil {
+	if request, err = i.packer.Unpack(sess.Conn); err != nil {
 		return
 	}
-	err = doRequest(r.Context(), sess, request)
+	err = play.DoRequest(r.Context(), sess, request)
 }
 
 func (i *h2cInstance) update(r *http.Request) error {
@@ -73,7 +78,7 @@ func (i *h2cInstance) update(r *http.Request) error {
 	return nil
 }
 
-func (i *h2cInstance) Info() play.InstanceInfo {
+func (i *h2cInstance) Info() play.IInstanceInfo {
 	return i.info
 }
 
@@ -119,4 +124,38 @@ func (i *h2cInstance) WithCertificate(cert tls.Certificate) *h2cInstance {
 
 func (i *h2cInstance) Network() string {
 	return "tcp"
+}
+
+func (i *h2cInstance) LookupActionUnit(requestName string) *play.ActionUnit {
+	return i.actions[requestName]
+}
+
+func (i *h2cInstance) BindActionSpace(spaceName string, actionPackages ...string) error {
+	return bindActionSpace(i, spaceName, actionPackages)
+}
+
+func (i *h2cInstance) AddActionUnits(units ...*play.ActionUnit) error {
+	for _, u := range units {
+		if i.actions[u.RequestName] != nil {
+			return errors.New("action unit " + u.RequestName + " is already exists in " + i.info.Name())
+		}
+		i.actions[u.RequestName] = u
+		i.sortedNames = append(i.sortedNames, u.RequestName)
+	}
+	sort.Strings(i.sortedNames)
+	return nil
+}
+
+// 返回actionNames的副本
+func (i *h2cInstance) ActionUnitNames() []string {
+	return append([]string(nil), i.sortedNames...)
+}
+
+func (i *h2cInstance) UpdateActionTimeout(spaceName string, actionName string, timeout time.Duration) {
+	if spaceName != "" {
+		spaceName = spaceName + "."
+	}
+	if act := i.actions[spaceName+actionName]; act != nil {
+		act.Timeout = timeout
+	}
 }

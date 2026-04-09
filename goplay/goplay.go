@@ -6,9 +6,10 @@ import (
 	"runtime"
 
 	"github.com/leochen2038/play/goplay/env"
-	"github.com/leochen2038/play/goplay/gendoc"
+	"github.com/leochen2038/play/goplay/gendocs"
 	"github.com/leochen2038/play/goplay/initProject"
 	"github.com/leochen2038/play/goplay/reconst"
+	"github.com/leochen2038/play/goplay/reconst/xmlPage"
 )
 
 var command string
@@ -17,7 +18,7 @@ var command string
 
 // 多包同名，可以在import进行引用别名
 func init() {
-	env.FrameworkVer = "v0.7.6"
+	env.FrameworkVer = "v0.9.0"
 	env.FrameworkName = "github.com/leochen2038/play"
 	// commandLine.StringVar(&env.FrameworkName, "f", "github.com/leochen2038/play", "framework module")
 	// commandLine.Parse(os.Args[2:])
@@ -62,16 +63,35 @@ func main() {
 	case "init":
 		if err := initProject.InitProject(false); err != nil {
 			fmt.Println("init project error ", err)
+			os.Exit(1)
 		}
-	case "reconst":
-		if err := reconst.ReconstProject(); err != nil {
+	case "reconst", "rebuild":
+		if err := runReconst(); err != nil {
 			fmt.Println(err)
+			os.Exit(1)
 		}
 	case "gendoc":
-		if err := gendoc.GenDoc(); err != nil {
+		if err := runReconst(); err != nil {
 			fmt.Println(err)
+			os.Exit(1)
+		}
+		// 生成文档
+		if err := gendocs.GenerateDocs(); err != nil {
+			fmt.Println("generate api docs error:", err)
+			os.Exit(1)
 		}
 	default:
 		fmt.Println("unknow command:", command)
 	}
+}
+
+func runReconst() error {
+	if err := reconst.ReconstProject(); err != nil {
+		return err
+	}
+	// 生成page
+	if err := xmlPage.PageStruct(); err != nil {
+		return err
+	}
+	return nil
 }

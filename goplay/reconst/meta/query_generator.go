@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,11 +44,12 @@ type MetaStrategy struct {
 }
 
 type MetaStorage struct {
-	Type     string `xml:"type,attr"`
-	Drive    string `xml:"drive,attr"`
-	Database string `xml:"database,attr"`
-	Table    string `xml:"table,attr"`
-	Router   string `xml:"router,attr"`
+	Type           string `xml:"type,attr"`
+	Drive          string `xml:"drive,attr"`
+	StrictAllTable string `xml:"strictAllTable,attr"`
+	Database       string `xml:"database,attr"`
+	Table          string `xml:"table,attr"`
+	Router         string `xml:"router,attr"`
 }
 
 type MetaHook struct {
@@ -65,7 +65,7 @@ func MetaGenerator() (err error) {
 		var meta Meta
 
 		if fi != nil && !fi.IsDir() && strings.HasSuffix(filename, ".xml") {
-			if data, err = ioutil.ReadFile(filename); err != nil {
+			if data, err = os.ReadFile(filename); err != nil {
 				return err
 			}
 			if err = xml.Unmarshal(data, &meta); err != nil {
@@ -187,8 +187,18 @@ type query%s struct {
 `, funcName)
 
 	var initFields string
+	var initFieldLenLimit string
+	var strategyMode bool
+
+	if meta.Strategy.Storage.StrictAllTable == "true" {
+		strategyMode = true
+	}
+
 	for _, field := range meta.Fields.List {
 		initFields += fmt.Sprintf(`"%s":{},`, field.Name)
+		if strategyMode && field.Type == "string" && field.Length > 0 {
+			initFieldLenLimit += fmt.Sprintf(`"%s":%d,`, field.Name, field.Length)
+		}
 	}
 	initFields += fmt.Sprintf(`"%s":{}`, meta.Key.Name)
 
@@ -204,10 +214,11 @@ func %s(c context.Context) *query%s {
 	obj.QueryInfo.Context = c
 	obj.QueryInfo.Sets = map[string][]interface{}{}
 	obj.QueryInfo.Fields = map[string]struct{}{%s}
+	obj.QueryInfo.FieldLenLimit = map[string]int{%s}
 	obj.QueryInfo.Init()
 	return obj
 }
-`, funcName, meta.Note, funcName, funcName, funcName, meta.Module, meta.Name, meta.Strategy.Storage.Database, meta.Strategy.Storage.Table, meta.Strategy.Storage.Router, initFields)
+`, funcName, meta.Note, funcName, funcName, funcName, meta.Module, meta.Name, meta.Strategy.Storage.Database, meta.Strategy.Storage.Table, meta.Strategy.Storage.Router, initFields, initFieldLenLimit)
 
 	for _, cond := range con1List {
 		// generate key
@@ -322,15 +333,17 @@ func (q *query%s)GroupBy(key string) *query%s {
 `, funcName, funcName)
 	src += fmt.Sprintf(`
 func (q *query%s)Count() (int64, error) {
+	%s
 	return %s.Count(&q.QueryInfo)
 }
-`, funcName, meta.Strategy.Storage.Drive)
+`, funcName, genHookCode(meta, "Count", "0"), meta.Strategy.Storage.Drive)
 
 	src += fmt.Sprintf(`
 func (q *query%s)Delete() (int64, error) {
+	%s
 	return %s.Delete(&q.QueryInfo)
 }
-`, funcName, meta.Strategy.Storage.Drive)
+`, funcName, genHookCode(meta, "Delete", "0"), meta.Strategy.Storage.Drive)
 
 	src += fmt.Sprintf(`
 func (q *query%s)Limit(start int64, count int64) *query%s {
@@ -520,7 +533,7 @@ func writeMeta(meta Meta) (err error) {
 	}
 	filePath := fmt.Sprintf("%s/library/db/%s_%s.go", env.ProjectPath, formatLowerName(meta.Module), formatLowerName(meta.Name))
 	src := generateQueryCode(meta)
-	if err = ioutil.WriteFile(filePath, []byte(src), 0644); err != nil {
+	if err = os.WriteFile(filePath, []byte(src), 0644); err != nil {
 		return
 	}
 	exec.Command(runtime.GOROOT()+"/bin/gofmt", "-w", filePath).Run()
@@ -530,7 +543,7 @@ func writeMeta(meta Meta) (err error) {
 	}
 	filePath = fmt.Sprintf("%s/library/metas/%s_%s.go", env.ProjectPath, formatLowerName(meta.Module), formatLowerName(meta.Name))
 	src = generateMetaCode(meta)
-	if err = ioutil.WriteFile(filePath, []byte(src), 0644); err != nil {
+	if err = os.WriteFile(filePath, []byte(src), 0644); err != nil {
 		return
 	}
 	exec.Command(runtime.GOROOT()+"/bin/gofmt", "-w", filePath).Run()

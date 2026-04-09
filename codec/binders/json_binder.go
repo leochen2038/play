@@ -69,7 +69,9 @@ func (b *jsonBinder) bindValue(v reflect.Value, s reflect.StructField, source gj
 		} else if required == "true" {
 			return errors.New("input: " + fullKey + " <" + s.Tag.Get("note") + "> is required")
 		}
-		return nil
+		if s.Type.Kind() != reflect.Struct {
+			return nil
+		}
 	}
 
 	switch s.Type.Kind() {

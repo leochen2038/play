@@ -7,10 +7,10 @@ import (
 	"io"
 	"sync"
 
+	"github.com/quic-go/quic-go"
 	"github.com/leochen2038/play"
 	"github.com/leochen2038/play/codec/protos/golang/json"
 	"github.com/leochen2038/play/codec/protos/pproto"
-	"github.com/quic-go/quic-go"
 )
 
 var callerId int = 0
@@ -39,13 +39,13 @@ func SetQuicRouter(name string, host string, nextProtos []string, config *quic.C
 	})
 }
 
-func GetQuicPProtoAgent(name string) (agent *quicPProtoAgent, err error) {
+func GetQuicPProtoAgent(ctx context.Context, name string) (agent *quicPProtoAgent, err error) {
 	if i, ok := quicRouter.Load(name); !ok {
 		return nil, errors.New("not found agent by:" + name)
 	} else {
 		agent = i.(*quicPProtoAgent)
 		if agent.connection == nil {
-			agent.connection, err = content(agent.addr, agent.nextProtos, agent.config)
+			agent.connection, err = content(ctx, agent.addr, agent.nextProtos, agent.config)
 		}
 	}
 
@@ -54,12 +54,12 @@ func GetQuicPProtoAgent(name string) (agent *quicPProtoAgent, err error) {
 
 func (q *quicPProtoAgent) getStream(ctx context.Context) (stream quic.Stream, err error) {
 	if q.connection == nil {
-		if q.connection, err = content(q.addr, q.nextProtos, q.config); err != nil {
+		if q.connection, err = content(ctx, q.addr, q.nextProtos, q.config); err != nil {
 			return nil, errors.New("connect to " + q.addr + " error:" + err.Error())
 		}
 	}
 	if stream, err = q.connection.OpenStreamSync(ctx); err != nil {
-		if q.connection, err = content(q.addr, q.nextProtos, q.config); err != nil {
+		if q.connection, err = content(ctx, q.addr, q.nextProtos, q.config); err != nil {
 			return nil, errors.New("connect after open stream err " + q.addr + " error:" + err.Error())
 		}
 		stream, err = q.connection.OpenStreamSync(ctx)
@@ -67,12 +67,12 @@ func (q *quicPProtoAgent) getStream(ctx context.Context) (stream quic.Stream, er
 	return stream, err
 }
 
-func content(addr string, nextprotos []string, config *quic.Config) (quic.Connection, error) {
+func content(ctx context.Context, addr string, nextprotos []string, config *quic.Config) (quic.Connection, error) {
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         nextprotos,
 	}
-	return quic.DialAddr(addr, tlsConf, config)
+	return quic.DialAddr(ctx, addr, tlsConf, config)
 }
 
 func (a *quicPProtoAgent) Request(ctx context.Context, service string, action string, body []byte) ([]byte, error) {

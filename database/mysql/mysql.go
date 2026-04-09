@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/leochen2038/play"
@@ -23,7 +24,7 @@ func GetConnect(router string) (*sql.DB, error) {
 	var dbconnect *sql.DB
 
 	if dest = database.GetDest(router); dest == "" {
-		return nil, fmt.Errorf("can not find mysql router:" + router)
+		return nil, fmt.Errorf("can not find mysql router: %s", router)
 	}
 
 	if connect, _ := dbconnects.Load(dest); connect == nil {
@@ -38,9 +39,9 @@ func GetConnect(router string) (*sql.DB, error) {
 			_ = dbconnect.Close()
 			return connect.(*sql.DB), nil
 		}
-
-		dbconnect.SetConnMaxLifetime(100)
+		dbconnect.SetConnMaxLifetime(1 * time.Hour)
 		dbconnect.SetMaxIdleConns(10)
+		dbconnect.SetConnMaxIdleTime(1 * time.Minute)
 		return dbconnect, nil
 	} else {
 		return connect.(*sql.DB), nil
@@ -478,13 +479,25 @@ func Update(query *play.Query) (modcount int64, err error) {
 
 	values := make([]interface{}, 0, len(query.Conditions)+len(query.Sets))
 
-	update, value := updatetext(query)
+	update, value, fields := updatetext(query)
 	values = append(values, value...)
+
+	if len(query.FieldLenLimit) > 0 {
+		for i, k := range fields {
+			key := strings.Replace(k, " = ?", "", -1)
+			if query.FieldLenLimit[key] == 0 {
+				continue
+			}
+			dataLen := utf8.RuneCountInString(values[i].(string))
+			if dataLen > query.FieldLenLimit[key] {
+				return 0, errors.New("field:" + key + " length cannot exceed " + strconv.Itoa(query.FieldLenLimit[key]))
+			}
+		}
+	}
 
 	where, value := condtext(query)
 	values = append(values, value...)
 
-	fmt.Println("UPDATE "+query.DBName+"."+query.Table+update+where, values)
 	res, err = conn.Exec("UPDATE "+query.DBName+"."+query.Table+update+where, values...)
 	if err != nil {
 		return
@@ -495,7 +508,7 @@ func Update(query *play.Query) (modcount int64, err error) {
 	return
 }
 
-func updatetext(query *play.Query) (string, []interface{}) {
+func updatetext(query *play.Query) (string, []interface{}, []string) {
 	values := make([]interface{}, 0, len(query.Sets))
 	fields := make([]string, 0, len(query.Sets)+1)
 	find := false
@@ -523,7 +536,7 @@ func updatetext(query *play.Query) (string, []interface{}) {
 	}
 
 	sql := " SET " + strings.Join(fields, ", ")
-	return sql, values
+	return sql, values, fields
 }
 
 func Delete(query *play.Query) (delcount int64, err error) {
@@ -552,7 +565,20 @@ func Save(meta interface{}, query *play.Query) (id int64, err error) {
 		return
 	}
 
-	insert, values := intotext(meta)
+	insert, values, fields := intotext(meta)
+
+	if len(query.FieldLenLimit) > 0 {
+		for i, k := range fields {
+			key := strings.Replace(k, " = ?", "", -1)
+			if query.FieldLenLimit[key] == 0 {
+				continue
+			}
+			dataLen := utf8.RuneCountInString(values[i].(string))
+			if dataLen > query.FieldLenLimit[key] {
+				return 0, errors.New("field:" + key + " length cannot exceed " + strconv.Itoa(query.FieldLenLimit[key]))
+			}
+		}
+	}
 
 	if res, err = conn.Exec("REPLACE INTO "+query.DBName+"."+query.Table+insert, values...); err == nil {
 		id, _ = res.LastInsertId()
@@ -561,7 +587,7 @@ func Save(meta interface{}, query *play.Query) (id int64, err error) {
 	return
 }
 
-func intotext(meta interface{}) (string, []interface{}) {
+func intotext(meta interface{}) (string, []interface{}, []string) {
 	t := reflect.TypeOf(meta).Elem()
 	v := reflect.ValueOf(meta).Elem()
 	numfield := t.NumField()
@@ -588,5 +614,5 @@ func intotext(meta interface{}) (string, []interface{}) {
 
 	sql := "(" + strings.Join(fields, ", ") + ") VALUES(" + strings.Join(placeholder, ", ") + ")"
 
-	return sql, values
+	return sql, values, fields
 }
