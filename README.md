@@ -298,10 +298,9 @@ func main() {
 }
 ```
 
-重新生成注册代码并运行：
+运行项目：
 
 ```bash
-goplay rebuild .
 go run .
 ```
 
@@ -577,7 +576,7 @@ goplay rebuild .
 
 ```go
 // 查询单条
-user, err := db.MydbUserInfo(ctx).WhereFuidEqual(123).Get()
+user, err := db.MydbUserInfo(ctx).WhereFuidEqual(123).GetOne()
 
 // 查询列表
 list, err := db.MydbUserInfo(ctx).WhereFstatusEqual(1).GetList()

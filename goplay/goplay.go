@@ -18,7 +18,7 @@ var command string
 
 // 多包同名，可以在import进行引用别名
 func init() {
-	env.FrameworkVer = "v0.8.1"
+	env.FrameworkVer = "v0.8.2"
 	env.FrameworkName = "github.com/leochen2038/play"
 	// commandLine.StringVar(&env.FrameworkName, "f", "github.com/leochen2038/play", "framework module")
 	// commandLine.Parse(os.Args[2:])
@@ -31,8 +31,8 @@ Usage:
 
 The commands are:
 	init	init a new project
-	reconst	project path
-    gendoc  generate api document`, env.FrameworkVer)
+	rebuild	project path
+	gendoc  generate api document`, env.FrameworkVer)
 		os.Exit(1)
 	}
 	if len(os.Args) < 3 {

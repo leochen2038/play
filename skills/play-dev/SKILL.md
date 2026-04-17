@@ -17,12 +17,12 @@ Play 框架使用代码生成，开发流程是：
 
 ```
 1. 编辑 assets/action/* (路由 DSL) 或 assets/meta/*.xml (数据模型)
-2. 运行 goplay reconst ./
+2. 运行 goplay rebuild ./
 3. 编写/修改 processor/**/*.go (业务逻辑)
 4. go run .
 ```
 
-**关键规则：每次修改了 `assets/action/` 或 `assets/meta/` 下的文件后，必须运行 `goplay reconst ./` 重新生成代码。** 这会生成 `init.go`（Action 注册）、Processor 模板文件、数据库查询 API 和数据结构体。如果用户忘了这步，要主动提醒。
+**关键规则：每次修改了 `assets/action/` 或 `assets/meta/` 下的文件后，必须运行 `goplay rebuild ./` 重新生成代码。** 这会生成 `init.go`（Action 注册）、Processor 模板文件、数据库查询 API 和数据结构体。如果用户忘了这步，要主动提醒。
 
 ## Action 路由 DSL
 
@@ -47,7 +47,7 @@ order.create {
 }
 ```
 
-- `[package_name]` — 包声明，分组用，对应 `goplay reconst` 时的 actionPackage
+- `[package_name]` — 包声明，分组用，对应 `goplay rebuild` 时的 actionPackage
 - `# @desc:` — 接口描述，同时用于文档生成和 MCP Tool 描述
 - `action.name` — Action 名称，HTTP 路径 `/action/name` 自动映射（`/` 转 `.`）
 - `package.ProcName()` — 指向 `processor/package/ProcName.go`
@@ -92,7 +92,7 @@ func (p *ProcGetUserInfo) Run(ctx *play.Context) (string, error) {
 
 ## Meta XML 数据模型
 
-在 `assets/meta/` 下定义 XML，`goplay reconst` 会生成：
+在 `assets/meta/` 下定义 XML，`goplay rebuild` 会生成：
 - `library/metas/` — 数据结构体（带 Setter）
 - `library/db/` — 链式查询 API
 
@@ -162,7 +162,7 @@ return "", play.WrapErr(err, "uid", uid).WrapCode(1001).WrapTip("操作失败")
 
 ## 常见错误提醒
 
-1. **修改 DSL/XML 后忘记 reconst** — 新 Action 不生效、找不到 Processor
+1. **修改 DSL/XML 后忘记 rebuild** — 新 Action 不生效、找不到 Processor
 2. **Processor 命名不匹配** — DSL 中的 `package.ProcName` 必须和 `processor/package/ProcName.go` 中的类型名完全一致
 3. **缺少 `play.ErrQueryEmptyResult` 判断** — 查询为空时 `GetOne`/`GetList` 返回此 error，不是真正的错误
 4. **BindActionSpace 的 package 名** — 对应 DSL 文件中 `[package_name]` 声明
